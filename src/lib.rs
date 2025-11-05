@@ -1,6 +1,4 @@
-use crate::exists_state::ExistsState;
 use crate::expression_generators::fn_update_to_smt;
-use crate::state_specification::StateSpecification;
 use biodivine_lib_param_bn::{BooleanNetwork, FnUpdate, ParameterId, VariableId};
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Not;
@@ -8,10 +6,14 @@ use z3::{FuncDecl, Sort};
 
 /// A data structure which defines one state that is supposed to exist in a BN.
 mod exists_state;
+pub use exists_state::ExistsState;
+
 /// Utility methods for generating logical expressions for the SMT solver.
 mod expression_generators;
+
 /// A data structure which defines the observed properties of a single BN state.
 mod state_specification;
+pub use state_specification::StateSpecification;
 
 /// Inference problem defines constraints on Boolean network behavior that can be converted
 /// into an SMT query and addressed by a solver (the result being an assignment of the

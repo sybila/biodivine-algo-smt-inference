@@ -37,7 +37,7 @@ impl ExistsState {
 
     /// Make a copy of the underlying SMT variables used to represent this symbolic state.
     ///
-    /// See also [`Self::mk_smt_var_map`] and [`Self::iter_smt_vars`].
+    /// See also [`Self::make_smt_var_map`] and [`Self::iter_smt_vars`].
     pub fn make_smt_vars(&self) -> Vec<Bool> {
         self.variables.clone()
     }
@@ -45,14 +45,14 @@ impl ExistsState {
     /// Iterate over the SMT variables of this [`ExistsState`]. The positions of the
     /// variables should match the corresponding [`VariableId`] in the original [`BooleanNetwork`].
     ///
-    /// See also [`Self::mk_smt_vars`].
+    /// See also [`Self::make_smt_vars`].
     pub fn iter_smt_vars(&self) -> impl Iterator<Item = Bool> {
         self.variables.iter().cloned()
     }
 
     /// Make a copy of the underlying SMT variables, indexed by the corresponding [`VariableId`].
     ///
-    /// See also [`Self::mk_smt_vars`].
+    /// See also [`Self::make_smt_vars`].
     pub fn make_smt_var_map(&self) -> BTreeMap<VariableId, Bool> {
         self.iter_smt_var_map().collect()
     }
@@ -60,7 +60,7 @@ impl ExistsState {
     /// Iterate over the pairs of corresponding network variables ([`VariableId`]) and SMT
     /// variables ([`Bool`]).
     ///
-    /// See also [`Self::mk_smt_var_map`].
+    /// See also [`Self::make_smt_var_map`].
     pub fn iter_smt_var_map(&self) -> impl Iterator<Item = (VariableId, Bool)> {
         self.variables
             .iter()
