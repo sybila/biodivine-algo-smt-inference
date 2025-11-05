@@ -7,13 +7,13 @@ use z3::ast::Bool;
 /// Internally, this means new Boolean SMT variable is declared for every
 /// variable in the network.
 #[derive(Clone)]
-pub struct ExistsState {
+pub struct SmtState {
     name: String,
     variables: Vec<Bool>,
 }
 
-impl ExistsState {
-    /// Build a new [`ExistsState`] for a given [`BooleanNetwork`].
+impl SmtState {
+    /// Build a new [`SmtState`] for a given [`BooleanNetwork`].
     ///
     /// By default, the names of the underlying SMT variables are built from both the
     /// state name and the variable name as `x_{state_name}_{network_variable_name}`.
@@ -42,7 +42,7 @@ impl ExistsState {
         self.variables.clone()
     }
 
-    /// Iterate over the SMT variables of this [`ExistsState`]. The positions of the
+    /// Iterate over the SMT variables of this [`SmtState`]. The positions of the
     /// variables should match the corresponding [`VariableId`] in the original [`BooleanNetwork`].
     ///
     /// See also [`Self::make_smt_vars`].

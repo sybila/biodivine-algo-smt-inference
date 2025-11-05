@@ -5,8 +5,8 @@ use std::ops::Not;
 use z3::{FuncDecl, Sort};
 
 /// A data structure which defines one state that is supposed to exist in a BN.
-mod exists_state;
-pub use exists_state::ExistsState;
+mod smt_state;
+pub use smt_state::SmtState;
 
 /// Utility methods for generating logical expressions for the SMT solver.
 mod expression_generators;
@@ -21,7 +21,7 @@ pub use state_specification::StateSpecification;
 pub struct InferenceProblem {
     network: BooleanNetwork, // Includes essentiality and monotonicity requirements.
     uninterpreted_symbols: BTreeMap<ParameterId, FuncDecl>,
-    state_declarations: BTreeMap<String, ExistsState>,
+    state_declarations: BTreeMap<String, SmtState>,
     state_specification: BTreeMap<String, StateSpecification>,
     fixed_points: BTreeSet<String>,
 }
@@ -62,27 +62,27 @@ impl InferenceProblem {
         }
     }
 
-    /// Make a new named [`ExistsState`] valid within this [`InferenceProblem`].
+    /// Make a new named [`SmtState`] valid within this [`InferenceProblem`].
     ///
     /// # Panics
     ///
     /// Method fails if a state with the same name already exists in this problem.
-    pub fn make_state<S: Into<String>>(&mut self, name: S) -> ExistsState {
+    pub fn make_state<S: Into<String>>(&mut self, name: S) -> SmtState {
         let name: String = name.into();
         assert!(!self.state_declarations.contains_key(&name));
-        let state = ExistsState::new(name.as_str(), &self.network);
+        let state = SmtState::new(name.as_str(), &self.network);
         self.state_declarations.insert(name.clone(), state.clone());
         state
     }
 
-    /// Retrieve a reference to one of the name [`ExistsState`] instances currently tracked
+    /// Retrieve a reference to one of the name [`SmtState`] instances currently tracked
     /// by this [`InferenceProblem`].
     ///
     /// # Panics
     ///
     /// Method fails if such state was not declared using [`Self::make_state`].
     ///
-    pub fn get_state<S: Into<String>>(&self, name: S) -> &ExistsState {
+    pub fn get_state<S: Into<String>>(&self, name: S) -> &SmtState {
         self.state_declarations.get(&name.into()).unwrap()
     }
 
