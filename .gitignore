@@ -27,3 +27,5 @@ target
 
 # Ignore local rust configuration
 .cargo/config.toml
+
+Cargo.lock
