@@ -3,7 +3,7 @@ use biodivine_lib_param_bn::Monotonicity::Activation;
 use biodivine_lib_param_bn::{BooleanNetwork, FnUpdate, ParameterId, VariableId};
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Not;
-use z3::ast::{Bool, forall_const};
+use z3::ast::{Ast, Bool, forall_const};
 use z3::{FuncDecl, Model, Sort};
 
 /// A data structure which defines one state that is supposed to exist in a BN.
@@ -114,10 +114,15 @@ impl InferenceProblem {
     ///
     /// Method fails if the given `parameter` is not valid in the network of this inference problem,
     /// or if it is not present in the given `model`.
+    ///
+    /// Right now, the method also assumes that the function has no "entries" and is only
+    /// specified as a single "else" expression. It will panic if this is not true.
     pub fn extract_uninterpreted_symbol(&self, model: &Model, parameter: ParameterId) -> String {
         let declaration = self.uninterpreted_symbols.get(&parameter).unwrap();
         let interpretation = model.get_func_interp(declaration).unwrap();
-        interpretation.to_string()
+        assert_eq!(interpretation.get_num_entries(), 0);
+        let else_branch = interpretation.get_else();
+        else_branch.simplify().to_string()
     }
 
     /// Assert that the state referenced by the given `name` must follow the specification

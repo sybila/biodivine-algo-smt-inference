@@ -50,7 +50,7 @@ fn one_fixed_point_both_possible() {
     assert_eq!(fix.extract_state(&model), vec![false, true, false]);
     assert_eq!(
         problem.extract_uninterpreted_symbol(&model, f),
-        "[else -> (and (:var 0) (:var 1))]"
+        "(and (:var 0) (:var 1))"
     );
 
     let mut specification = StateSpecification::default();
@@ -69,7 +69,7 @@ fn one_fixed_point_both_possible() {
     assert_eq!(fix.extract_state(&model), vec![false, true, true]);
     assert_eq!(
         problem.extract_uninterpreted_symbol(&model, f),
-        "[else -> (not (and (not (:var 0)) (not (:var 1))))]"
+        "(not (and (not (:var 0)) (not (:var 1))))"
     );
 }
 
@@ -98,7 +98,7 @@ fn one_fixed_point_optimize() {
     assert_eq!(fix.extract_state(&model), vec![false, true, false]);
     assert_eq!(
         problem.extract_uninterpreted_symbol(&model, f),
-        "[else -> (and (:var 0) (:var 1))]"
+        "(and (:var 0) (:var 1))"
     );
 
     // And now do the same thing the other way around. Specification 111 has distance one to 011,
@@ -121,6 +121,6 @@ fn one_fixed_point_optimize() {
     assert_eq!(fix.extract_state(&model), vec![false, true, true]);
     assert_eq!(
         problem.extract_uninterpreted_symbol(&model, f),
-        "[else -> (not (and (not (:var 0)) (not (:var 1))))]"
+        "(not (and (not (:var 0)) (not (:var 1))))"
     );
 }
