@@ -4,7 +4,7 @@ use biodivine_lib_param_bn::{BooleanNetwork, FnUpdate, ParameterId, VariableId};
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Not;
 use z3::ast::{Bool, forall_const};
-use z3::{FuncDecl, Sort};
+use z3::{FuncDecl, Model, Sort};
 
 /// A data structure which defines one state that is supposed to exist in a BN.
 mod smt_state;
@@ -102,6 +102,22 @@ impl InferenceProblem {
         let name: String = name.into();
         assert!(self.state_declarations.contains_key(&name));
         self.fixed_points.insert(name);
+    }
+
+    /// Extract a string representation of the uninterpreted function symbol from a model.
+    ///
+    /// In the future, we probably want this to extract some Boolean expression type
+    /// instead, but it seems this is non-trivial with the current Z3 API so we'll leave it
+    /// as future work...
+    ///
+    /// # Panics
+    ///
+    /// Method fails if the given `parameter` is not valid in the network of this inference problem,
+    /// or if it is not present in the given `model`.
+    pub fn extract_uninterpreted_symbol(&self, model: &Model, parameter: ParameterId) -> String {
+        let declaration = self.uninterpreted_symbols.get(&parameter).unwrap();
+        let interpretation = model.get_func_interp(declaration).unwrap();
+        interpretation.to_string()
     }
 
     /// Assert that the state referenced by the given `name` must follow the specification
