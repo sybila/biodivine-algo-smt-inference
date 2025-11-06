@@ -1,6 +1,6 @@
 use biodivine_lib_param_bn::{BooleanNetwork, VariableId};
 use std::collections::BTreeMap;
-use z3::ast::Bool;
+use z3::ast::{Ast, Bool};
 
 /// Represents a declaration of "some state" that exists in a Boolean network.
 ///
@@ -40,6 +40,13 @@ impl SmtState {
     /// See also [`Self::make_smt_var_map`] and [`Self::iter_smt_vars`].
     pub fn make_smt_vars(&self) -> Vec<Bool> {
         self.variables.clone()
+    }
+
+    /// Similar to [`Self::make_smt_vars`], but it provides a dynamic reference to
+    /// the underlying SMT variables, which is sometimes useful due to how the Z3 API
+    /// in Rust works.
+    pub fn make_dyn_smt_vars(&self) -> Vec<&dyn Ast> {
+        self.variables.iter().map(|it| it as &dyn Ast).collect()
     }
 
     /// Iterate over the SMT variables of this [`SmtState`]. The positions of the

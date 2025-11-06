@@ -1,7 +1,9 @@
 use crate::expression_generators::fn_update_to_smt;
+use biodivine_lib_param_bn::Monotonicity::Activation;
 use biodivine_lib_param_bn::{BooleanNetwork, FnUpdate, ParameterId, VariableId};
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Not;
+use z3::ast::{Bool, forall_const};
 use z3::{FuncDecl, Sort};
 
 /// A data structure which defines one state that is supposed to exist in a BN.
@@ -148,6 +150,62 @@ impl InferenceProblem {
                 solver.assert(&smt_var.iff(smt_update));
             }
         }
+
+        // Finally, assert that essential/monotonic regulations have their respective properties:
+        for reg in self.network.as_graph().regulations() {
+            let update = self.get_update_function(reg.target);
+
+            // Technically, both of these declare one extra SMT variable that is not used/needed,
+            // but that should not be a big performance issue.
+
+            if reg.observable {
+                // Declare a new state `O` for which it holds `update(O[r=0]) != update(O[r=1])`.
+                let essential_name =
+                    format!("o_{}_{}", reg.regulator.to_index(), reg.target.to_index());
+                let smt_state = SmtState::new(essential_name.as_str(), &self.network);
+                let mut map = smt_state.make_smt_var_map();
+                map.insert(reg.regulator, Bool::from_bool(true));
+                let fn_update_reg_true =
+                    fn_update_to_smt(update, &map, &self.uninterpreted_symbols);
+                map.insert(reg.regulator, Bool::from_bool(false));
+                let fn_update_reg_false =
+                    fn_update_to_smt(update, &map, &self.uninterpreted_symbols);
+                solver.assert(&fn_update_reg_true.iff(fn_update_reg_false).not());
+            }
+
+            if let Some(m) = reg.monotonicity {
+                // Declare a new state `ACT` or `INH` where for every such state holds that
+                // `update(ACT[r=0]) <= update(ACT[r=1])` (symmetrically for `INH`).
+                let key = if m == Activation { "act" } else { "inh" };
+                let monotonicity_name = format!(
+                    "{}_{}_{}",
+                    key,
+                    reg.regulator.to_index(),
+                    reg.target.to_index()
+                );
+                let smt_state = SmtState::new(monotonicity_name.as_str(), &self.network);
+                let mut map = smt_state.make_smt_var_map();
+                map.insert(reg.regulator, Bool::from_bool(true));
+                let fn_update_reg_true =
+                    fn_update_to_smt(update, &map, &self.uninterpreted_symbols);
+                map.insert(reg.regulator, Bool::from_bool(false));
+                let fn_update_reg_false =
+                    fn_update_to_smt(update, &map, &self.uninterpreted_symbols);
+
+                let assertion = if m == Activation {
+                    fn_update_reg_false.implies(fn_update_reg_true)
+                } else {
+                    fn_update_reg_true.implies(fn_update_reg_false)
+                };
+
+                solver.assert(&forall_const(
+                    &smt_state.make_dyn_smt_vars(),
+                    &[],
+                    &assertion,
+                ));
+            }
+        }
+
         solver
     }
 
