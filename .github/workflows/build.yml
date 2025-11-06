@@ -16,8 +16,8 @@ jobs:
   validate:
     uses: sybila/github-workflows/.github/workflows/rust-z3-build-and-check.yml@main
     with:
-      z3-version: "4.13.3"
-      rust-version: "1.90.0"
+      z3-version: "4.15.3"
+      rust-version: "1.91.0"
       min-rust-version: "1.88.0"
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
