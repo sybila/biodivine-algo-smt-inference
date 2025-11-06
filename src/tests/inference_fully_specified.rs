@@ -216,3 +216,69 @@ fn one_in_two_fixed_point_optimize() {
     let model = solver.get_model().unwrap();
     assert_eq!(fix.extract_state(&model), vec![true, true, true]);
 }
+
+#[test]
+fn essentiality_positive() {
+    let (mut bn, a, _b, c) = make_one_fixed_point_network();
+    // Make a -> c essential
+    bn.as_graph_mut().remove_regulation(a, c).unwrap();
+    bn.as_graph_mut().add_string_regulation("a -? c").unwrap();
+
+    let problem = InferenceProblem::new(bn.clone());
+    let solver = problem.build_solver();
+    assert_eq!(solver.check(&[]), SatResult::Sat);
+}
+
+#[test]
+fn essentiality_negative() {
+    let (mut bn, a, b, c) = make_one_fixed_point_network();
+    // Make a -> c essential
+    bn.as_graph_mut().remove_regulation(a, c).unwrap();
+    bn.as_graph_mut().add_string_regulation("a -? c").unwrap();
+    // But don't use it in the actual update function.
+    bn.set_update_function(c, Some(FnUpdate::Var(b))).unwrap();
+
+    let problem = InferenceProblem::new(bn.clone());
+    let solver = problem.build_solver();
+    assert_eq!(solver.check(&[]), SatResult::Unsat);
+}
+
+#[test]
+fn monotonicity_positive() {
+    let (mut bn, a, _b, c) = make_one_fixed_point_network();
+    // Make a -> c an activation
+    bn.as_graph_mut().remove_regulation(a, c).unwrap();
+    bn.as_graph_mut().add_string_regulation("a ->? c").unwrap();
+
+    let problem = InferenceProblem::new(bn.clone());
+    let solver = problem.build_solver();
+    assert_eq!(solver.check(&[]), SatResult::Sat);
+
+    // Now make the update function negative in `a` and check that the solver is not sat.
+    bn.set_update_function(c, Some(FnUpdate::Var(a).negation()))
+        .unwrap();
+
+    let problem = InferenceProblem::new(bn.clone());
+    let solver = problem.build_solver();
+    assert_eq!(solver.check(&[]), SatResult::Unsat);
+}
+
+#[test]
+fn monotonicity_negative() {
+    let (mut bn, a, _b, c) = make_one_fixed_point_network();
+    // Make a -> c an inhibition
+    bn.as_graph_mut().remove_regulation(a, c).unwrap();
+    bn.as_graph_mut().add_string_regulation("a -|? c").unwrap();
+
+    let problem = InferenceProblem::new(bn.clone());
+    let solver = problem.build_solver();
+    assert_eq!(solver.check(&[]), SatResult::Unsat);
+
+    // Now make the update function negative in `a` and check that the solver is sat.
+    bn.set_update_function(c, Some(FnUpdate::Var(a).negation()))
+        .unwrap();
+
+    let problem = InferenceProblem::new(bn.clone());
+    let solver = problem.build_solver();
+    assert_eq!(solver.check(&[]), SatResult::Sat);
+}
