@@ -1,8 +1,8 @@
 use crate::expression_generators::fn_update_to_smt;
+use biodivine_lib_bdd::{Bdd, BddVariableSet, ValuationsOfClauseIterator};
 use biodivine_lib_param_bn::Monotonicity::Activation;
 use biodivine_lib_param_bn::{BooleanNetwork, FnUpdate, ParameterId, VariableId};
 use std::collections::{BTreeMap, BTreeSet};
-use std::ops::Not;
 use z3::ast::{Ast, Bool, forall_const};
 use z3::{FuncDecl, Model, Sort};
 
@@ -104,25 +104,53 @@ impl InferenceProblem {
         self.fixed_points.insert(name);
     }
 
-    /// Extract a string representation of the uninterpreted function symbol from a model.
+    /// Extract a BDD representation of the uninterpreted function symbol from a model.
     ///
-    /// In the future, we probably want this to extract some Boolean expression type
-    /// instead, but it seems this is non-trivial with the current Z3 API so we'll leave it
-    /// as future work...
+    /// Currently, this requires the full enumeration of the function table. In the future,
+    /// we probably want to provide an option to extract an expression string, but also to
+    /// extract a BDD while avoiding the full enumeration. However, Z3 API makes it quite
+    /// hard to extract an expression in a way that is useful to us. We can (mostly) only
+    /// extract SMT-LIB expression strings that we would have to parse, and furthermore, they
+    /// are generally not deterministic (i.e. we can get different strings representing the
+    /// same function on different OS-es or Z3 versions).
     ///
     /// # Panics
     ///
     /// Method fails if the given `parameter` is not valid in the network of this inference problem,
     /// or if it is not present in the given `model`.
-    ///
-    /// Right now, the method also assumes that the function has no "entries" and is only
-    /// specified as a single "else" expression. It will panic if this is not true.
-    pub fn extract_uninterpreted_symbol(&self, model: &Model, parameter: ParameterId) -> String {
-        let declaration = self.uninterpreted_symbols.get(&parameter).unwrap();
-        let interpretation = model.get_func_interp(declaration).unwrap();
-        assert_eq!(interpretation.get_num_entries(), 0);
-        let else_branch = interpretation.get_else();
-        else_branch.simplify().to_string()
+    pub fn extract_uninterpreted_symbol(
+        &self,
+        model: &Model,
+        parameter_id: ParameterId,
+    ) -> (BddVariableSet, Bdd) {
+        let parameter = self.network.get_parameter(parameter_id);
+        let declaration = self.uninterpreted_symbols.get(&parameter_id).unwrap();
+
+        // Build BDD context:
+        let arity = u16::try_from(parameter.get_arity()).unwrap();
+        let bdd_ctx = BddVariableSet::new_anonymous(arity);
+
+        // Build an exhaustive DNF representation of the whole function:
+        let mut dnf = Vec::new();
+        for clause in ValuationsOfClauseIterator::new_unconstrained(arity) {
+            let smt_clause: Vec<Bool> = clause
+                .clone()
+                .into_vector()
+                .into_iter()
+                .map(Bool::from_bool)
+                .collect();
+            let smt_refs: Vec<&dyn Ast> = smt_clause.iter().map(|it| it as &dyn Ast).collect();
+            let application = declaration.apply(&smt_refs);
+            let result = model.eval(&application, true).unwrap();
+            let result = result.as_bool().unwrap().as_bool().unwrap();
+            if result {
+                dnf.push(clause.to_partial_valuation());
+            }
+        }
+
+        // And convert it into a BDD:
+        let bdd = bdd_ctx.mk_dnf(&dnf);
+        (bdd_ctx, bdd)
     }
 
     /// Assert that the state referenced by the given `name` must follow the specification
