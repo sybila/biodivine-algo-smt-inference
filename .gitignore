@@ -29,3 +29,6 @@ target
 .cargo/config.toml
 
 Cargo.lock
+
+# Ignore Python environments
+/venv
