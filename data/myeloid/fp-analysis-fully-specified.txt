@@ -1,0 +1,19 @@
+Total colors: 1
+------
+Total colored fixed points: 6
+Total fixed point states: 6
+Total fixed point colors: 1
+------
+Raw fixed point vertices projection (across all colors):
+VertexModel({'CEBPa': 0, 'EKLF': 0, 'EgrNab': 0, 'FOG1': 0, 'Fli1': 0, 'GATA1': 0, 'GATA2': 0, 'Gfi1': 0, 'PU1': 0, 'SCL': 0, 'cjun': 0})
+VertexModel({'CEBPa': 0, 'EKLF': 0, 'EgrNab': 0, 'FOG1': 1, 'Fli1': 1, 'GATA1': 1, 'GATA2': 0, 'Gfi1': 0, 'PU1': 0, 'SCL': 1, 'cjun': 0})
+VertexModel({'CEBPa': 0, 'EKLF': 0, 'EgrNab': 1, 'FOG1': 0, 'Fli1': 0, 'GATA1': 0, 'GATA2': 0, 'Gfi1': 0, 'PU1': 1, 'SCL': 0, 'cjun': 1})
+VertexModel({'CEBPa': 0, 'EKLF': 1, 'EgrNab': 0, 'FOG1': 1, 'Fli1': 0, 'GATA1': 1, 'GATA2': 0, 'Gfi1': 0, 'PU1': 0, 'SCL': 1, 'cjun': 0})
+VertexModel({'CEBPa': 1, 'EKLF': 0, 'EgrNab': 0, 'FOG1': 0, 'Fli1': 0, 'GATA1': 0, 'GATA2': 0, 'Gfi1': 1, 'PU1': 1, 'SCL': 0, 'cjun': 0})
+VertexModel({'CEBPa': 1, 'EKLF': 0, 'EgrNab': 1, 'FOG1': 0, 'Fli1': 0, 'GATA1': 0, 'GATA2': 0, 'Gfi1': 0, 'PU1': 1, 'SCL': 0, 'cjun': 1})
+------
+Fixed point combinations per model color:
+1 ['00000000000', '00011100010', '00100000101', '01010100010', '10000001100', '10100000101']
+------
+Unique fixed point combinations:
+('00000000000', '00011100010', '00100000101', '01010100010', '10000001100', '10100000101')
