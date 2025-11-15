@@ -17,6 +17,10 @@ mod expression_generators;
 mod state_specification;
 pub use state_specification::StateSpecification;
 
+/// A data structure which defines one state that is supposed to exist in a BN.
+mod observations;
+pub use observations::{Dataset, Observation};
+
 /// A module for collectively storing non-trivial tests, because we will probably need
 /// quite a few of them (simpler unit tests can still go into the modules of the tested code)
 #[cfg(test)]

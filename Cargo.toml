@@ -6,6 +6,8 @@ edition = "2024"
 [dependencies]
 biodivine-lib-param-bn = "0.6.2"
 biodivine-lib-bdd = "0.6.2"
+itertools = "0.10.3"
 z3 = "0.19.2"
 num-rational = "0.4.2"
 num-traits = "0.2.19"
+csv = "1.3"
