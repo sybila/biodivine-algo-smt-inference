@@ -115,8 +115,8 @@ def main(psbn_path, csv_path, print_colors):
     # Compute colored fixed points symbolically
     fixed_points = FixedPoints.symbolic(stg)
     print(f"Total colored fixed points: {fixed_points.cardinality()}")
-    print(f"Total fixed point states: {fixed_points.vertices().cardinality()}")
-    print(f"Total fixed point colors: {fixed_points.colors().cardinality()}")
+    print(f"Unique fixed point states: {fixed_points.vertices().cardinality()}")
+    print(f"Unique fixed point colors: {fixed_points.colors().cardinality()}")
     print("------")
 
     # Try progressively removing constraints (making N of the fixed-point

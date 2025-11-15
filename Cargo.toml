@@ -3,6 +3,10 @@ name = "biodivine-lib-smt"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "naive-fps-inference"
+path = "src/bin/naive_fps_inference.rs"
+
 [dependencies]
 biodivine-lib-param-bn = "0.6.2"
 biodivine-lib-bdd = "0.6.2"
