@@ -17,9 +17,13 @@ mod expression_generators;
 mod state_specification;
 pub use state_specification::StateSpecification;
 
-/// A data structure which defines one state that is supposed to exist in a BN.
+/// Data structures to load and process datasets of observations.
 mod observations;
 pub use observations::{Dataset, Observation};
+
+/// Method for naive inference with imprecise fixed-point specification.
+mod naive_inference;
+pub use naive_inference::run_naive_inference;
 
 /// A module for collectively storing non-trivial tests, because we will probably need
 /// quite a few of them (simpler unit tests can still go into the modules of the tested code)
