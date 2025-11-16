@@ -1,10 +1,12 @@
-use crate::StateSpecification;
+use crate::{InferenceProblem, StateSpecification};
 use biodivine_lib_param_bn::BooleanNetwork;
+use num_rational::BigRational;
+use num_traits::FromPrimitive;
 use std::collections::BTreeMap;
 
 /// A single observation, i.e., a mapping from variables to binary values.
 ///
-/// TODO: add weights
+/// TODO: add proper weights
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Observation {
     pub values: BTreeMap<String, bool>,
@@ -22,7 +24,7 @@ impl Observation {
 /// Each observation is a named assignment of binary values to a subset of
 /// the dataset's `variables`.
 ///
-/// TODO: add weights
+/// TODO: add proper weights
 #[derive(Clone, Debug, PartialEq)]
 pub struct Dataset {
     pub observations: BTreeMap<String, Observation>,
@@ -112,16 +114,16 @@ impl Dataset {
         Self::parse_dataset_from_csv(&csv_content)
     }
 
-    /// Convert this dataset into a list of [`StateSpecification`] objects using the provided
-    /// [`BooleanNetwork`] to map variable names to `VariableId` indices.
+    /// Convert this dataset into a list of `StateSpecification` objects using the provided
+    /// `BooleanNetwork` to map variable names to `VariableId` indices.
     ///
-    /// Each observation in the dataset becomes a [`StateSpecification`] where all observed
-    /// values are asserted as "must" constraints (confidence = 1.0).
+    /// Each observation in the dataset becomes a `StateSpecification` where all observed
+    /// values are asserted as a "may" constraints with uniform weight (0.5).
     ///
     /// Returns an error if any variable name in the dataset does not exist in the network.
     ///
-    /// TODO: Add weights
-    pub fn to_specifications(
+    /// TODO: Add proper weights
+    pub fn to_specification_list(
         &self,
         network: &BooleanNetwork,
     ) -> Result<BTreeMap<String, StateSpecification>, String> {
@@ -139,12 +141,38 @@ impl Dataset {
                     .find_variable(var_name)
                     .ok_or_else(|| format!("Variable '{}' not found in the network", var_name))?;
 
-                spec.assert_must(var_id, *value);
+                let weight = BigRational::from_f32(0.5).unwrap();
+                spec.assert_may(var_id, *value, &weight);
             }
 
             specs.insert(obs_id.clone(), spec);
         }
 
         Ok(specs)
+    }
+
+    /// Combine this dataset with the provided `BooleanNetwork` into an `InferenceProblem`
+    /// instance.
+    ///
+    /// The dataset is used to derive fixed-point specification. See [`Self::to_specifications`]
+    /// for details.
+    ///
+    /// Returns an error if any variable name in the dataset does not exist in the network.
+    ///
+    /// TODO: Add proper weights
+    pub fn to_inference_problem(
+        &self,
+        network: &BooleanNetwork,
+    ) -> Result<InferenceProblem, String> {
+        let specs = self.to_specification_list(network)?;
+
+        let mut problem = InferenceProblem::new(network.clone());
+        for (obs_id, obs_specification) in specs {
+            problem.make_state(&obs_id);
+            problem.assert_fixed_point(&obs_id);
+            problem.assert_state_observation(&obs_id, &obs_specification);
+        }
+
+        Ok(problem)
     }
 }

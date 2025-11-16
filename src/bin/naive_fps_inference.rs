@@ -81,14 +81,15 @@ fn run_inference(
         // Iterate all N-combinations of indices to remove
         for ignore_set in indices.clone().into_iter().combinations(num_to_remove) {
             let loosened_dataset_spec = loosen_specification(dataset_spec, &ignore_set);
-            let current_spec = loosened_dataset_spec.to_specifications(bn)?;
+            let current_spec = loosened_dataset_spec.to_specification_list(bn)?;
 
             // Start with all colors, refine with fixed-point constraints
             let mut satisfying_colors = fixed_points.colors();
             for (_, fp_subspec) in current_spec {
                 let subspace_values: Vec<(VariableId, bool)> = fp_subspec
-                    .make_required_assertion_map()
+                    .make_optional_assertion_map() // assuming all values are optional
                     .into_iter()
+                    .map(|(var_id, (value, _weight))| (var_id, value))
                     .collect();
                 let spec_vertices = stg.mk_subspace(&subspace_values).vertices();
                 let matched_colors = fixed_points.intersect_vertices(&spec_vertices).colors();
