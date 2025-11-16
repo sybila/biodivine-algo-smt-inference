@@ -7,6 +7,12 @@ use biodivine_lib_param_bn::symbolic_async_graph::{GraphColors, SymbolicAsyncGra
 use biodivine_lib_param_bn::{BooleanNetwork, VariableId};
 use itertools::Itertools;
 
+/// WIP: Prototype to run a naive inference method.
+///
+/// Currently returns all optimal specifications and corresponding solutions as
+/// a map {`removed_may_constraints` -> `sat_colors`}.
+/// Note that some satisfying solutions may be part of multiple entries in the map,
+/// since they can satisfy more than one optimal specifications.
 pub fn run_naive_inference(
     bn: &BooleanNetwork,
     dataset_spec: &Dataset,
