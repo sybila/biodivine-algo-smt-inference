@@ -23,7 +23,7 @@ pub fn run_naive_inference(
     // Build list of indexable specification entries (observation_id, variable_name) pairs
     let mut indices: Vec<(String, String)> = Vec::new();
     for (obs_id, observation) in &dataset_spec.observations {
-        for var_name in observation.values.keys() {
+        for var_name in observation.value_map.keys() {
             indices.push((obs_id.clone(), var_name.clone()));
         }
     }
@@ -72,14 +72,14 @@ pub fn run_naive_inference(
 }
 
 /// Remove specific (observation_id, variable) entries from the full specification.
-fn loosen_specification(
+pub fn loosen_specification(
     full_specification: &Dataset,
     ignore_indices: &[(String, String)],
 ) -> Dataset {
     let mut loosened_specification = full_specification.clone();
     for (obs_id, var_name) in ignore_indices {
         if let Some(obs) = loosened_specification.observations.get_mut(obs_id) {
-            obs.values.remove(var_name);
+            obs.value_map.remove(var_name);
         }
     }
     loosened_specification

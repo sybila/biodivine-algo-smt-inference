@@ -6,16 +6,50 @@ use std::collections::BTreeMap;
 
 /// A single observation, i.e., a mapping from variables to binary values.
 ///
-/// TODO: add proper weights
+/// TODO: add weights to the values
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Observation {
-    pub values: BTreeMap<String, bool>,
+    pub value_map: BTreeMap<String, bool>,
 }
 
 impl Observation {
-    /// Create `Observation` object from prepared value map.
-    pub fn new(values: BTreeMap<String, bool>) -> Observation {
-        Self { values }
+    /// Create `Observation` object from prepared variable-value map.
+    pub fn from_value_map(value_map: BTreeMap<String, bool>) -> Observation {
+        Observation { value_map }
+    }
+
+    /// Create `Observation` object from prepared variable and values lists.
+    /// The lists must have the same length.
+    pub fn from_value_lists(
+        variables: Vec<String>,
+        values: Vec<bool>,
+    ) -> Result<Observation, String> {
+        if variables.len() != values.len() {
+            Err("Lists of variables and values must have the same length.".to_string())
+        } else {
+            let value_map = BTreeMap::from_iter(variables.into_iter().zip(values));
+            Ok(Observation::from_value_map(value_map))
+        }
+    }
+
+    /// Convert observation into a string of 0/1/*, considering the provided variables.
+    /// Values are ordered according to the variable list. Variables not present in
+    /// the observation get *. Variables not present in the list are ignored.
+    pub fn to_value_string(&self, variables: &Vec<String>) -> String {
+        let mut value_string = String::new();
+        for variable in variables {
+            let value = self.value_map.get(variable);
+            if let Some(bool_value) = value {
+                if *bool_value {
+                    value_string.push('1');
+                } else {
+                    value_string.push('0');
+                }
+            } else {
+                value_string.push('*');
+            }
+        }
+        value_string
     }
 }
 
@@ -35,8 +69,6 @@ impl Dataset {
     /// Parse a dataset from a CSV string. The header line specifies variables, following lines
     /// represent individual observations (id and values).
     ///
-    /// The resulting dataset has an empty annotation string (same for all its observations).
-    ///
     /// For example, the following might be a valid CSV string for a dataset with 2 observations:
     ///    ID,YOX1,CLN3,YHP1,ACE2,SWI5,MBF
     ///    Observation1,0,1,0,1,0,1
@@ -44,7 +76,7 @@ impl Dataset {
     ///
     /// TODO: Add weights
     ///
-    pub fn parse_dataset_from_csv(csv_content: &str) -> Result<Dataset, String> {
+    pub fn from_csv(csv_content: &str) -> Result<Dataset, String> {
         let mut reader = csv::Reader::from_reader(csv_content.as_bytes());
 
         // parse variable names from the header (skip ID column)
@@ -52,7 +84,7 @@ impl Dataset {
         let variables = header
             .iter()
             .skip(1)
-            .map(|s| s.to_string())
+            .map(|s| s.trim().to_string())
             .collect::<Vec<String>>();
 
         // parse all rows as observations and build a map id -> Observation
@@ -97,7 +129,7 @@ impl Dataset {
                 }
             }
 
-            let observation = Observation::new(values_map);
+            let observation = Observation::from_value_map(values_map);
             observations.insert(id.to_string(), observation);
         }
 
@@ -107,11 +139,33 @@ impl Dataset {
         })
     }
 
+    /// Print dataset by first listing the variables, and then listing all observations
+    /// as binary vectors (with '*' for unspecified values).
+    pub fn to_debug_string(&self) -> String {
+        let mut dataset_string = String::new();
+
+        // First list all variables, then all observations
+        dataset_string.push_str("{Variables: {");
+        let variables_joined_str = self.variables.join(", ");
+        dataset_string.push_str(&variables_joined_str);
+
+        dataset_string.push_str("}, Observations: {");
+        let observations_string_list: Vec<String> = self
+            .observations
+            .iter()
+            .map(|(obs_id, obs)| format!("{obs_id}: {}", obs.to_value_string(&self.variables)))
+            .collect();
+        let observation_joined_str = observations_string_list.join(", ");
+        dataset_string.push_str(&observation_joined_str);
+        dataset_string.push_str("}}");
+        dataset_string
+    }
+
     /// Load a dataset from a given CSV file. Reads the file into a string and then parses it
-    /// into a dataset using [Self::parse_dataset_from_csv].
-    pub fn load_dataset(csv_path: &str) -> Result<Dataset, String> {
+    /// into a dataset using [Self::from_csv].
+    pub fn load_from_csv(csv_path: &str) -> Result<Dataset, String> {
         let csv_content = std::fs::read_to_string(csv_path).map_err(|e| e.to_string())?;
-        Self::parse_dataset_from_csv(&csv_content)
+        Self::from_csv(&csv_content)
     }
 
     /// Convert this dataset into a list of `StateSpecification` objects using the provided
@@ -134,7 +188,7 @@ impl Dataset {
 
             // For each variable value in the observation, find its VariableId in the network
             // and assert it as a "must" constraint.
-            for (var_name, value) in &observation.values {
+            for (var_name, value) in &observation.value_map {
                 // Find the VariableId by name in the network
                 let var_id = network
                     .as_graph()
@@ -154,7 +208,7 @@ impl Dataset {
     /// Combine this dataset with the provided `BooleanNetwork` into an `InferenceProblem`
     /// instance.
     ///
-    /// The dataset is used to derive fixed-point specification. See [`Self::to_specifications`]
+    /// The dataset is used to derive fixed-point specification. See [`Self::to_specification_list`]
     /// for details.
     ///
     /// Returns an error if any variable name in the dataset does not exist in the network.

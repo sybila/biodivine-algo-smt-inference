@@ -1,9 +1,10 @@
-use biodivine_lib_param_bn::biodivine_std::traits::Set;
-use biodivine_lib_param_bn::symbolic_async_graph::SymbolicAsyncGraph;
-use biodivine_lib_smt::Dataset;
+use biodivine_lib_smt::{Dataset, loosen_specification};
 
+use biodivine_lib_param_bn::biodivine_std::traits::Set;
 use biodivine_lib_param_bn::fixed_points::FixedPoints;
+use biodivine_lib_param_bn::symbolic_async_graph::SymbolicAsyncGraph;
 use biodivine_lib_param_bn::{BooleanNetwork, VariableId};
+
 use itertools::Itertools;
 use std::fs;
 
@@ -21,7 +22,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bn_string = fs::read_to_string(psbn_path)?;
     let bn = BooleanNetwork::try_from(bn_string.as_str())?;
     // Parse the observations (fixed-point specification) from CSV
-    let dataset_spec = Dataset::load_dataset(csv_path)?;
+    let dataset_spec = Dataset::load_from_csv(csv_path)?;
 
     run_inference(&bn, &dataset_spec)?;
 
@@ -39,15 +40,13 @@ fn run_inference(
     println!("------");
 
     println!("Specified fixed-point observations:");
-    for (obs_id, values) in &dataset_spec.observations {
-        println!("{}: {:?}", obs_id, values);
-    }
+    println!("{}", dataset_spec.to_debug_string());
     println!("------");
 
     // Build list of indexable specification entries (observation_id, variable_name) pairs
     let mut indices: Vec<(String, String)> = Vec::new();
     for (obs_id, observation) in &dataset_spec.observations {
-        for var_name in observation.values.keys() {
+        for var_name in observation.value_map.keys() {
             indices.push((obs_id.clone(), var_name.clone()));
         }
     }
@@ -104,7 +103,10 @@ fn run_inference(
                 found_solution = true;
                 println!("\tFound matching specification!");
                 println!("\t-> Removed values: {:?}", ignore_set);
-                println!("\t-> Matching specification: {:?}", loosened_dataset_spec);
+                println!(
+                    "\t-> Matching specification: {}",
+                    loosened_dataset_spec.to_debug_string()
+                );
                 println!(
                     "\t-> {} colors satisfy this specification",
                     satisfying_colors.exact_cardinality()
@@ -120,18 +122,4 @@ fn run_inference(
     }
 
     Ok(())
-}
-
-/// Remove specific (observation_id, variable) entries from the full specification.
-fn loosen_specification(
-    full_specification: &Dataset,
-    ignore_indices: &[(String, String)],
-) -> Dataset {
-    let mut loosened_specification = full_specification.clone();
-    for (obs_id, var_name) in ignore_indices {
-        if let Some(obs) = loosened_specification.observations.get_mut(obs_id) {
-            obs.values.remove(var_name);
-        }
-    }
-    loosened_specification
 }
