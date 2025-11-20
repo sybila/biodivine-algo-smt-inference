@@ -14,6 +14,7 @@ Various models and datasets for testing, benchmarking, and case studies.
     - This process compares the distribution of RNA measurements between said value and all distributions across values of the same gene binarized to a different value.
     - Intuitively, if the value is 1, the confidence expresses "how different is the distribution of these measurements compared to closes zero".
   - A literature-based "base GRN" was obtained from OmniPath. 
-    - This GRN has a lot of genes (8000+), but only a relatively small portion represents a strongly connected component.
+    - This GRN has a lot of relevant genes (4000+), but only a relatively small portion represents a strongly connected component.
     - Also, in this setting, we definitely do not expect all regulations to be essential (i.e. we do not have evidence that they play a role *in this particular biological process*, just that they are common across various cells).
     - This allows us to "scale" the inference problem: The smallest instance should cover the central SCC. Then we can gradually add other "input/output" variables as needed.
+    - Some of the data was filtered using `preprocess_data.py`, but all outputs should be commited in the repository.
