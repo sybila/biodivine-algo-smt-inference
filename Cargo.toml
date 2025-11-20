@@ -1,5 +1,5 @@
 [package]
-name = "biodivine-lib-smt"
+name = "biodivine-algo-smt-inference"
 version = "0.1.0"
 edition = "2024"
 
@@ -10,8 +10,9 @@ path = "src/bin/naive_fps_inference.rs"
 [dependencies]
 biodivine-lib-param-bn = "0.6.2"
 biodivine-lib-bdd = "0.6.2"
-itertools = "0.10.3"
-z3 = "0.19.2"
+itertools = "0.14.0"
+#z3 = "0.19.2"
+z3 = { git = "https://github.com/sybila/z3.rs.git" }
 num-rational = "0.4.2"
 num-traits = "0.2.19"
 csv = "1.3"

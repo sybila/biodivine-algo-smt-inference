@@ -1,4 +1,4 @@
-use biodivine_lib_smt::{Dataset, loosen_specification};
+use biodivine_algo_smt_inference::{Dataset, loosen_specification};
 
 use biodivine_lib_param_bn::biodivine_std::traits::Set;
 use biodivine_lib_param_bn::fixed_points::FixedPoints;
