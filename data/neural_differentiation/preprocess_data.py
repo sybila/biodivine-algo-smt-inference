@@ -29,6 +29,8 @@ def main():
 
     # Output files
     full_graph_file = os.path.join(base_dir, "omnipath_full.aeon")
+    filtered_confidence_file = os.path.join(base_dir, "table_full_confidence_filtered.tsv")
+    filtered_observations_file = os.path.join(base_dir, "table_full_observations_filtered.tsv")
     scc_graph_file = os.path.join(base_dir, "omnipath_largest_scc.aeon")
     scc_genes_file = os.path.join(base_dir, "omnipath_largest_scc_genes.txt")
     scc_confidence_file = os.path.join(base_dir, "table_scc_confidence.tsv")
@@ -42,8 +44,20 @@ def main():
         return
         
     allowed_genes = eval(Path(observed_genes_file).read_text())
+    # Sanitize allowed genes (replace - with _)
+    allowed_genes = { g.replace('-', '_') for g in allowed_genes }
         
     print(f"Found {len(allowed_genes)} allowed genes.")
+
+    # Load allowed cell types
+    cell_types_file = os.path.join(base_dir, "celltypes_terminal.txt")
+    print(f"Loading allowed cell types from {cell_types_file}...")
+    if not os.path.exists(cell_types_file):
+        print(f"Error: {cell_types_file} not found.")
+        return
+
+    allowed_cell_types = eval(Path(cell_types_file).read_text())
+    print(f"Found {len(allowed_cell_types)} allowed cell types.")
 
     # (a) Load gene-gene regulations
     print(f"Loading regulations from {omnipath_file}...")
@@ -53,8 +67,8 @@ def main():
     genes = set()
     
     for _, row in df_omnipath.iterrows():
-        source = str(row['source_genesymbol'])
-        target = str(row['target_genesymbol'])
+        source = str(row['source_genesymbol']).replace('-', '_')
+        target = str(row['target_genesymbol']).replace('-', '_')
         
         # Skip invalid gene names if any
         if source.lower() == 'nan' or target.lower() == 'nan':
@@ -116,8 +130,7 @@ def main():
 
     # (e) Output SCC graph and genes
     print("Building SCC RegulatoryGraph...")
-    rg_scc = copy(rg)
-    rg_scc.drop(set(rg.variables()) - set(largest_scc))
+    rg_scc = rg.drop(set(rg.variables()) - set(largest_scc))
     
     print(f"Saving SCC graph to {scc_graph_file}...")
     Path(scc_graph_file).write_text(rg_scc.to_aeon())
@@ -138,7 +151,22 @@ def main():
     if 'gene' not in df_obs.columns:
         print(f"Error: 'gene' column not found in {observations_file}")
 
-    # Filter
+    # Sanitize gene names in tables
+    df_conf['gene'] = df_conf['gene'].str.replace('-', '_')
+    df_obs['gene'] = df_obs['gene'].str.replace('-', '_')
+
+    # Filter columns (keep 'gene' + allowed cell types)
+    valid_columns = ['gene'] + [c for c in df_conf.columns if c in allowed_cell_types]
+    print(f"Filtering columns. Keeping {len(valid_columns)} columns (including 'gene').")
+    
+    df_conf = df_conf[valid_columns]
+    df_obs = df_obs[valid_columns]
+
+    print(f"Saving filtered full tables to {filtered_confidence_file} and {filtered_observations_file}...")
+    df_conf.to_csv(filtered_confidence_file, sep='\t', index=False)
+    df_obs.to_csv(filtered_observations_file, sep='\t', index=False)
+
+    # Filter rows
     df_conf_scc = df_conf[df_conf['gene'].isin(scc_genes_set)]
     df_obs_scc = df_obs[df_obs['gene'].isin(scc_genes_set)]
     

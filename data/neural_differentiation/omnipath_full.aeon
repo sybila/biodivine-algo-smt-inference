@@ -351,8 +351,8 @@ Stat5b ->? Insr
 Sp1 -|? Egfr
 Myc ->? Jup
 Sp1 ->? Smad7
-Rela ->? H2-K1
-Rela ->? H2-D1
+Rela ->? H2_K1
+Rela ->? H2_D1
 Dbp ->? Per1
 Usf1 ->? Hgf
 Usf2 ->? Hgf
@@ -468,8 +468,8 @@ Usf1 ->? S100a6
 Thra ->? Pkd1
 Bcl6 -|? Stat3
 Stat3 -?? Bcl6
-Yy1 ->? H2-K1
-Yy1 ->? H2-D1
+Yy1 ->? H2_K1
+Yy1 ->? H2_D1
 Sp1 ->? Vcam1
 Id4 -|? Brca1
 Sp1 ->? Ebp
@@ -1060,8 +1060,8 @@ Foxo1 ->? Ppargc1a
 Kat7 ->? Cdkn1a
 E2f1 ->? Ccnd3
 Tbp ->? Hmox1
-Klf3 ->? Hbb-y
-Klf3 ->? Hbb-bh1
+Klf3 ->? Hbb_y
+Klf3 ->? Hbb_bh1
 Smad4 -|? Vegfa
 Bhlhe40 -|? Bhlhe41
 Bhlhe41 -?? Bhlhe40
@@ -1655,8 +1655,8 @@ Rela -|? Egr1
 Egr1 ->? Gadd45a
 Egr1 ->? Gadd45b
 Junb ->? Gja1
-Satb1 ->? Hbb-y
-Satb1 ->? Hbb-bh1
+Satb1 ->? Hbb_y
+Satb1 ->? Hbb_bh1
 Egr1 -|? Slc8a1
 Nr4a1 ->? Pkd1
 Cebpg ->? Alox5ap
@@ -2069,8 +2069,8 @@ Elk3 ->? Hmox1
 Cebpb ->? Map3k14
 Cebpb ->? Slc2a4
 Bhlhe40 ->? Birc5
-Sox6 -|? Hbb-y
-Sox6 -|? Hbb-bh1
+Sox6 -|? Hbb_y
+Sox6 -|? Hbb_bh1
 Nfkb1 ->? Gca
 Ppard ->? Pnpla2
 Egr1 ->? Pgk1
@@ -2463,8 +2463,8 @@ Atf1 ->? Hgf
 Irf1 -|? Ccnd1
 Sox6 -|? Ccnd1
 Ahr -|? Vegfa
-Nr2c1 ->? Hbb-y
-Nr2c1 ->? Hbb-bh1
+Nr2c1 ->? Hbb_y
+Nr2c1 ->? Hbb_bh1
 Cebpb ->? Sox6
 Nfkb1 ->? Yy1
 Rela ->? Yy1
@@ -2595,8 +2595,8 @@ Myc -?? Erf
 Erf -|? Myc
 Esr1 ->? Birc5
 Nfic ->? Gadd45a
-Tbp ->? Hbb-y
-Tbp ->? Hbb-bh1
+Tbp ->? Hbb_y
+Tbp ->? Hbb_bh1
 Jun -?? Kdm2b
 Kdm2b -|? Jun
 Sp1 ->? Ptprj
@@ -3270,8 +3270,8 @@ Htatip2 ->? Ephb2
 Htatip2 ->? Met
 Htatip2 -|? Vegfa
 Usf1 ->? Id2
-Irf1 ->? H2-K1
-Irf1 ->? H2-D1
+Irf1 ->? H2_K1
+Irf1 ->? H2_D1
 Cebpb ->? Lpin1
 Egr1 ->? Lpin1
 Ets2 ->? Lpin1
@@ -3600,8 +3600,8 @@ Nfatc4 ->? Lpin1
 Srebf1 ->? Pnpla3
 Id2 ->? Sema3f
 Tcf3 ->? Sema3f
-Bcl11a -|? Hbb-y
-Bcl11a -|? Hbb-bh1
+Bcl11a -|? Hbb_y
+Bcl11a -|? Hbb_bh1
 Esr1 ->? Pttg1ip
 Kdm5a ->? Fgfr1
 Kdm5a ->? Hmox1
@@ -3695,7 +3695,7 @@ Cebpb ->? Rgs4
 Tbp ->? Kat2b
 Myc ->? Tfrc
 Smad7 -|? Vegfa
-Ybx3 -|? Hbb-y
+Ybx3 -|? Hbb_y
 Cebpb ->? Acaca
 Elk4 ->? Fos
 Jun ->? Fbxw7
@@ -4239,8 +4239,8 @@ Sp3 ->? Apba1
 Sp3 ->? App
 Cebpb ->? Mapk8
 Stat3 ->? Enpp2
-Ascl1 ->? Hbb-y
-Ascl1 ->? Hbb-bh1
+Ascl1 ->? Hbb_y
+Ascl1 ->? Hbb_bh1
 Ezh2 -|? Dact3
 Ezh2 -|? Sstr1
 Myc ->? Bag2
@@ -4557,8 +4557,8 @@ Myc ->? Cited2
 E2f3 ->? Cited2
 Mafb ->? Spock1
 Satb2 ->? Kat2b
-Satb2 ->? Hbb-y
-Satb2 ->? Hbb-bh1
+Satb2 ->? Hbb_y
+Satb2 ->? Hbb_bh1
 Mbd2 ->? Kdm2b
 Sp1 ->? Ppp2r1b
 Sp3 ->? Ppp2r1b
@@ -5347,8 +5347,8 @@ Fos -?? Rb1
 Rb1 -|? Fos
 Cebpb ->? Tnfaip6
 Fos ->? A2m
-Yy1 -|? Hbb-y
-Yy1 -|? Hbb-bh1
+Yy1 -|? Hbb_y
+Yy1 -|? Hbb_bh1
 Pou2f2 ->? Rpn1
 Mxd1 ->? Sin3a
 Rarg ->? Pam
@@ -5416,8 +5416,8 @@ Irf1 ->? Eif2ak2
 Fos ->? Bloc1s3
 Rxrb ->? Rbp1
 Rora ->? Lamb1
-Zfx ->? H2-K1
-Zfx ->? H2-D1
+Zfx ->? H2_K1
+Zfx ->? H2_D1
 Atf1 ->? Camk2a
 Egr2 ->? Nab1
 Fos ->? Nfkbia
@@ -6241,8 +6241,8 @@ Hipk2 -|? Ctbp2
 Hipk2 -|? Mef2c
 Hipk2 -|? Vegfa
 Hipk2 -|? Vim
-Hivep2 ->? H2-K1
-Hivep2 ->? H2-D1
+Hivep2 ->? H2_K1
+Hivep2 ->? H2_D1
 Hmg20b ->? Brca2
 Hsf2 -|? Map2k4
 Hsf2 -|? Mapk8
@@ -6347,8 +6347,8 @@ Myc ->? Atf3
 Myc ->? Cdc34
 Myc ->? Chek1
 Myc ->? Chek2
-Myc ->? H2-K1
-Myc ->? H2-D1
+Myc ->? H2_K1
+Myc ->? H2_D1
 Myc ->? Ipo7
 Myc ->? Mme
 Myc ->? Pgk1
@@ -6366,8 +6366,8 @@ Mycn ->? Cd44
 Mycn ->? Cdkn1a
 Mycn ->? Cdkn1b
 Mycn ->? Efnb3
-Mycn -|? H2-K1
-Mycn -|? H2-D1
+Mycn -|? H2_K1
+Mycn -|? H2_D1
 Mycn ->? Id2
 Mycn ->? Mcm10
 Mycn ->? Mybl2
@@ -6619,9 +6619,9 @@ Rest -|? Gabrb3
 Rest -|? Scg3
 Rest -|? Vgf
 Rfx3 -|? Map1a
-Rfx5 ->? H2-DMa
-Rfxank ->? H2-DMa
-Rfxap ->? H2-DMa
+Rfx5 ->? H2_DMa
+Rfxank ->? H2_DMa
+Rfxap ->? H2_DMa
 Rnf14 ->? Ccnd1
 Rora ->? E2f1
 Rxra ->? Abca1
@@ -6640,8 +6640,8 @@ Sirt1 ->? Cflar
 Sirt1 -|? Col1a2
 Sirt1 ->? Esrrg
 Sirt1 -|? Ezh2
-Sirt1 -|? Hbb-y
-Sirt1 -|? Hbb-bh1
+Sirt1 -|? Hbb_y
+Sirt1 -|? Hbb_bh1
 Sirt1 ->? Mcl1
 Sirt1 ->? Nbn
 Sirt1 ->? Ndrg1
@@ -7654,8 +7654,8 @@ Dlx2 ->? Arx
 Smad5 ->? Gadd45g
 Smad5 ->? Smad6
 Smad5 ->? Satb2
-Klf11 ->? Hbb-y
-Klf11 ->? Hbb-bh1
+Klf11 ->? Hbb_y
+Klf11 ->? Hbb_bh1
 Ccnd1 ->? Msi1
 Mkx ->? Sox5
 Tcf12 ->? Notch3
@@ -7673,8 +7673,8 @@ Nfatc2 ->? Gpc6
 Nfatc2 ->? Fst
 Hdac1 -|? Hes1
 Asxl1 ->? Rara
-Klf2 ->? Hbb-y
-Klf2 ->? Hbb-bh1
+Klf2 ->? Hbb_y
+Klf2 ->? Hbb_bh1
 Nfatc3 ->? Gpc6
 Maml2 ->? Notch1
 Maml2 ->? Hes1
@@ -7922,8 +7922,8 @@ Irf2 ->? Itga2b
 Irf2 ->? Ogn
 Jun ->? Fosl2
 Jun ->? Prkcd
-Jun ->? H2-K1
-Jun ->? H2-D1
+Jun ->? H2_K1
+Jun ->? H2_D1
 Jun ->? Mndal
 Jun ->? Cyba
 Jun ->? Cast
@@ -8031,8 +8031,8 @@ Nfic ->? Foxm1
 Nfic ->? Nr3c1
 Nfil3 -|? Bcl2l1
 Nfkb1 ->? Mdm2
-Nfkb1 -|? H2-K1
-Nfkb1 -|? H2-D1
+Nfkb1 -|? H2_K1
+Nfkb1 -|? H2_D1
 Nfya ->? Lef1
 Nfya ->? Notch1
 Nfya ->? Sdhd
@@ -8608,7 +8608,7 @@ Bcl11a ->? Id3
 Bcl11b -|? Tgfa
 Bcl11b -|? Tgfb2
 Sall4 ->? Sox2
-Jun ->? Hbb-y
+Jun ->? Hbb_y
 Meis1 ->? Pax6
 Meis1 ->? Ptch1
 Dlx1 ->? Gad2
@@ -12691,7 +12691,7 @@ Bcl11a -?? Gclc
 Bcl11a -?? Gfra1
 Bcl11a -?? Gnpda2
 Bcl11a -?? Gria1
-Bcl11a -?? H2-DMa
+Bcl11a -?? H2_DMa
 Bcl11a -?? Hvcn1
 Bcl11a -?? Iqce
 Bcl11a -?? Jup
@@ -12917,7 +12917,7 @@ Chd2 -?? Ezh2
 Chd2 -?? Fabp3
 Chd2 -?? Fanca
 Chd2 -?? Fxyd1
-Chd2 -?? H2-DMa
+Chd2 -?? H2_DMa
 Chd2 -?? Hvcn1
 Chd2 -?? Iqce
 Chd2 -?? Irf2
@@ -13123,7 +13123,7 @@ Ebf1 -?? Frmd6
 Ebf1 -?? Fut8
 Ebf1 -?? Gclc
 Ebf1 -?? Has3
-Ebf1 -?? H2-DMa
+Ebf1 -?? H2_DMa
 Ebf1 -?? Hvcn1
 Ebf1 -?? Ikzf2
 Ebf1 -?? Inhbb
@@ -13553,7 +13553,7 @@ Mef2a -?? Fbxw7
 Mef2a -?? Frmd6
 Mef2a -?? Fut8
 Mef2a -?? Gclc
-Mef2a -?? H2-DMa
+Mef2a -?? H2_DMa
 Mef2a -?? Hvcn1
 Mef2a -?? Ikzf2
 Mef2a -?? Iqce
@@ -13736,7 +13736,7 @@ Nfkb1 -?? Frem2
 Nfkb1 -?? Frmd6
 Nfkb1 -?? Fut8
 Nfkb1 -?? Has3
-Nfkb1 -?? H2-DMa
+Nfkb1 -?? H2_DMa
 Nfkb1 -?? Hvcn1
 Nfkb1 -?? Ikzf2
 Nfkb1 -?? Inpp1
@@ -13818,7 +13818,7 @@ Pbx3 -?? Coro1a
 Pbx3 -?? Etfb
 Pbx3 -?? Fanca
 Pbx3 -?? Fbxw7
-Pbx3 -?? H2-DMa
+Pbx3 -?? H2_DMa
 Pbx3 -?? Hvcn1
 Pbx3 -?? Inhbb
 Pbx3 -?? Irf2
@@ -13854,7 +13854,7 @@ Pou2f2 -?? Ebi3
 Pou2f2 -?? Etfb
 Pou2f2 -?? Frmd6
 Pou2f2 -?? Has3
-Pou2f2 -?? H2-DMa
+Pou2f2 -?? H2_DMa
 Pou2f2 -?? Hvcn1
 Pou2f2 -?? Inhbb
 Pou2f2 -?? Iqce
@@ -13977,7 +13977,7 @@ Rad21 -?? Hecw2
 Rad21 -?? Hepacam
 Rad21 -?? Heyl
 Rad21 -?? Hist1h2ap
-Rad21 -?? H2-DMa
+Rad21 -?? H2_DMa
 Rad21 -?? Hspb6
 Rad21 -?? Htra1
 Rad21 -?? Hvcn1
@@ -14320,7 +14320,7 @@ Sp1 -?? Gtpbp2
 Sp1 -?? Has3
 Sp1 -?? Hey1
 Sp1 -?? Hist1h2ap
-Sp1 -?? H2-DMa
+Sp1 -?? H2_DMa
 Sp1 -?? Htra1
 Sp1 -?? Hvcn1
 Sp1 -?? Iqce
@@ -14423,7 +14423,7 @@ Srf -?? Grb14
 Srf -?? Gtpbp2
 Srf -?? Hey1
 Srf -?? Hist1h2ap
-Srf -?? H2-DMa
+Srf -?? H2_DMa
 Srf -?? Hspb6
 Srf -?? Irf2
 Srf -?? Klk8
@@ -14458,7 +14458,7 @@ Stat3 -?? Ebi3
 Stat3 -?? Etfb
 Stat3 -?? Fads3
 Stat3 -?? Gpcpd1
-Stat3 -?? H2-DMa
+Stat3 -?? H2_DMa
 Stat3 -?? Klk8
 Stat3 -?? Lipg
 Stat3 -?? Lsr
@@ -14520,7 +14520,7 @@ Tbp -?? Golph3l
 Tbp -?? Gpr37
 Tbp -?? Gtf2h2
 Tbp -?? Hepacam
-Tbp -?? H2-DMa
+Tbp -?? H2_DMa
 Tbp -?? Hlf
 Tbp -?? Irf2
 Tbp -?? Klk8
@@ -14780,7 +14780,7 @@ Usf2 -?? Evl
 Usf2 -?? Fads3
 Usf2 -?? Fam118a
 Usf2 -?? Gtf2h2
-Usf2 -?? H2-DMa
+Usf2 -?? H2_DMa
 Usf2 -?? Hspb3
 Usf2 -?? Irf2
 Usf2 -?? Klk8
@@ -14834,7 +14834,7 @@ Yy1 -?? Fxyd1
 Yy1 -?? Gnpda2
 Yy1 -?? Gpr162
 Yy1 -?? Hepacam
-Yy1 -?? H2-DMa
+Yy1 -?? H2_DMa
 Yy1 -?? Hlf
 Yy1 -?? Hvcn1
 Yy1 -?? Ipo11
@@ -14887,7 +14887,7 @@ Zeb1 -?? Ebi3
 Zeb1 -?? Etfb
 Zeb1 -?? Evl
 Zeb1 -?? Fanca
-Zeb1 -?? H2-DMa
+Zeb1 -?? H2_DMa
 Zeb1 -?? Iqce
 Zeb1 -?? Irf2
 Zeb1 -?? Klk8
@@ -17457,8 +17457,8 @@ Rfx5 -?? Apoe
 Rfx5 -?? Lrrc51
 Rfx5 -?? Cdkn2d
 Rfx5 -?? Cks2
-Rfx5 -?? H2-K1
-Rfx5 -?? H2-D1
+Rfx5 -?? H2_K1
+Rfx5 -?? H2_D1
 Rfx5 -?? Mxd1
 Rfx5 -?? Ccng2
 Rfx5 -?? Fancg
