@@ -29,6 +29,8 @@ target
 
 Cargo.lock
 
+.DS_Store
+
 # Ignore Python environments
 /venv
 
