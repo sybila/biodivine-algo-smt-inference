@@ -6,3 +6,14 @@ Various models and datasets for testing, benchmarking, and case studies.
   - `4v-activ` is a sparse 4-variable model with activations only
   - `4v-B` is a more dense model with various regulations
   - `5v` is a 5-variable extension of the `4v-B` model
+- `neural_differentiation` contains a large benchmark instance based on real biological data.
+  - The biological data comes from [this study](https://www.nature.com/articles/s41586-021-03670-5) of neural cell differentiation.
+  - The data has been binarized using scBoolSeq on a per-cell-type basis (i.e. not per-measurement, but per "cluster of similar cells").
+    - Here, the binarization process can produce 0/1/nan, i.e. some portion of values remains unknown.
+  - Confidence scores were then assigned to each binarized value based on differential expression.
+    - This process compares the distribution of RNA measurements between said value and all distributions across values of the same gene binarized to a different value.
+    - Intuitively, if the value is 1, the confidence expresses "how different is the distribution of these measurements compared to closes zero".
+  - A literature-based "base GRN" was obtained from OmniPath. 
+    - This GRN has a lot of genes (8000+), but only a relatively small portion represents a strongly connected component.
+    - Also, in this setting, we definitely do not expect all regulations to be essential (i.e. we do not have evidence that they play a role *in this particular biological process*, just that they are common across various cells).
+    - This allows us to "scale" the inference problem: The smallest instance should cover the central SCC. Then we can gradually add other "input/output" variables as needed.
