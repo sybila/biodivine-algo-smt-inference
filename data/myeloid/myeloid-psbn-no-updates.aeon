@@ -28,17 +28,17 @@ GATA1 -> SCL
 GATA1 -| CEBPa
 GATA2 -> GATA1
 PU1 -> cjun
-$CEBPa: CEBPa & !(GATA1 & FOG1 & SCL)
-$EKLF: GATA1 & !Fli1
-$EgrNab: PU1 & cjun & !Gfi1
-$FOG1: GATA1
-$Fli1: GATA1 & !EKLF
-$GATA1: (GATA1 | GATA2 | Fli1) & !PU1
-$GATA2: GATA2 & !(GATA1 & FOG1) & !PU1
-$Gfi1: CEBPa & !EgrNab
-$PU1: (CEBPa | PU1) & !(GATA1 | GATA2)
-$SCL: GATA1 & !PU1
-$cjun: PU1 & !Gfi1
+$CEBPa: f1(CEBPa, GATA1, FOG1, SCL)
+$EKLF: f2(GATA1, Fli1)
+$EgrNab: f3(PU1, cjun, Gfi1)
+$FOG1: f4(GATA1)
+$Fli1: f5(GATA1, EKLF)
+$GATA1: f6(GATA1, GATA2, Fli1, PU1)
+$GATA2: f7(GATA2, GATA1, FOG1, PU1)
+$Gfi1: f8(CEBPa, EgrNab)
+$PU1: f9(CEBPa, PU1, GATA1, GATA2)
+$SCL: f10(GATA1, PU1)
+$cjun: f11(PU1, Gfi1)
 #position:EKLF:325.92612,-226.8565
 #position:cjun:-169.24475,-149.82033
 #position:SCL:72.994225,-148.84085
