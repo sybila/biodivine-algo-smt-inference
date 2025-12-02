@@ -126,7 +126,7 @@ impl BlockingStrategy for CombinedBlocker {
         // TODO: if there are no functions, this would fail - do we want to allow this
         //       and return just the state blocker?
         let func_blocker = FunctionSymbolBlocker.generate_blocker(model, problem)?;
-        
+
         Ok(Bool::and(&[&state_blocker, &func_blocker]))
     }
 }
