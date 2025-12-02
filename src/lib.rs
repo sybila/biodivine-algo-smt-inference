@@ -25,6 +25,10 @@ pub use observations::{Dataset, Observation};
 mod naive_inference;
 pub use naive_inference::{loosen_specification, run_naive_inference};
 
+/// Blocking clause strategies for iterating over multiple unique solutions.
+pub mod blocking;
+pub use blocking::{BlockingStrategy, CombinedBlocker, FixedPointBlocker, FunctionSymbolBlocker};
+
 /// A module for collectively storing non-trivial tests, because we will probably need
 /// quite a few of them (simpler unit tests can still go into the modules of the tested code)
 #[cfg(test)]
@@ -99,6 +103,34 @@ impl InferenceProblem {
     ///
     pub fn get_state<S: Into<String>>(&self, name: S) -> &SmtState {
         self.state_declarations.get(&name.into()).unwrap()
+    }
+
+    /// Get a reference to the underlying Boolean network.
+    pub fn get_network(&self) -> &BooleanNetwork {
+        &self.network
+    }
+
+    /// Get a reference to the map of state declarations (SMT states).
+    pub fn get_state_declarations(&self) -> &BTreeMap<String, SmtState> {
+        &self.state_declarations
+    }
+
+    /// Get a reference to the map of state specifications (required and optional
+    /// constraints from observations).
+    pub fn get_state_specification(&self) -> &BTreeMap<String, StateSpecification> {
+        &self.state_specification
+    }
+
+    /// Get a reference to the map of function symbols.
+    pub fn get_uninterpreted_symbols(&self) -> &BTreeMap<ParameterId, z3::FuncDecl> {
+        &self.uninterpreted_symbols
+    }
+
+    /// Retrieve the internally stored [`FnUpdate`] for the given [`VariableId`], using
+    /// the assumption that the network has no anonymous parameters, meaning the update function
+    /// cannot be `None`.
+    fn get_update_function(&self, bn_var: VariableId) -> &FnUpdate {
+        self.network.get_update_function(bn_var).as_ref().unwrap()
     }
 
     /// Assert that the state referenced by the given `name` is a network fixed-point.
@@ -271,10 +303,49 @@ impl InferenceProblem {
         solver
     }
 
-    /// Retrieve the internally stored [`FnUpdate`] for the given [`VariableId`], using
-    /// the assumption that the network has no anonymous parameters, meaning the update function
-    /// cannot be `None`.
-    fn get_update_function(&self, bn_var: VariableId) -> &FnUpdate {
-        self.network.get_update_function(bn_var).as_ref().unwrap()
+    /// Iterate over all satisfying solutions using the provided blocking strategy.
+    /// Return the number of solutions found.
+    ///
+    /// This method builds a solver, checks for satisfiability, and uses the provided strategy
+    /// to generate blocking clauses to exclude each found solution from subsequent checks.
+    /// The `strategy` determines how to block each found model, see [`BlockingStrategy`].
+    ///
+    /// For now, we use a `callback` function to process each solution as we go.
+    pub fn get_solutions<F>(
+        &self,
+        strategy: &dyn BlockingStrategy,
+        mut callback: F,
+    ) -> Result<usize, String>
+    where
+        F: FnMut(&z3::Model) -> Result<(), String>,
+    {
+        let solver = self.build_solver();
+        let mut count = 0;
+
+        loop {
+            // Check for satisfiability and stop if not sat
+            if solver.check(&[]) != z3::SatResult::Sat {
+                break;
+            }
+
+            let model = solver
+                .get_model()
+                .ok_or("Failed to get model from solver")?;
+            callback(&model)?;
+            count += 1;
+
+            // Generate and assert a blocking clause
+            match strategy.generate_blocker(&model, self) {
+                Ok(blocker) => {
+                    solver.assert(&blocker);
+                }
+                Err(e) => {
+                    // If we can't generate a blocker, stop with an err message
+                    return Err(format!("Failed to generate blocker: {}", e));
+                }
+            }
+        }
+
+        Ok(count)
     }
 }
