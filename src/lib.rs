@@ -304,25 +304,33 @@ impl InferenceProblem {
     }
 
     /// Iterate over all satisfying solutions using the provided blocking strategy.
-    /// Return the number of solutions found.
+    /// Maximum of `max_solutions` solutions will be returned.
     ///
     /// This method builds a solver, checks for satisfiability, and uses the provided strategy
     /// to generate blocking clauses to exclude each found solution from subsequent checks.
     /// The `strategy` determines how to block each found model, see [`BlockingStrategy`].
     ///
-    /// For now, we use a `callback` function to process each solution as we go.
+    /// For now, we use a `callback` function to process each solution as we go. This can
+    /// be used for on-the-fly logging or to stop computation when some condition is met.
     pub fn get_solutions<F>(
         &self,
         strategy: &dyn BlockingStrategy,
+        max_solutions: Option<usize>,
         mut callback: F,
-    ) -> Result<usize, String>
+    ) -> Result<Vec<z3::Model>, String>
     where
         F: FnMut(&z3::Model) -> Result<(), String>,
     {
         let solver = self.build_solver();
-        let mut count = 0;
+        let mut collected_models = Vec::new();
 
         loop {
+            if let Some(max) = max_solutions
+                && collected_models.len() >= max
+            {
+                break;
+            }
+
             // Check for satisfiability and stop if not sat
             if solver.check(&[]) != z3::SatResult::Sat {
                 break;
@@ -332,7 +340,6 @@ impl InferenceProblem {
                 .get_model()
                 .ok_or("Failed to get model from solver")?;
             callback(&model)?;
-            count += 1;
 
             // Generate and assert a blocking clause
             match strategy.generate_blocker(&model, self) {
@@ -344,8 +351,10 @@ impl InferenceProblem {
                     return Err(format!("Failed to generate blocker: {}", e));
                 }
             }
+
+            collected_models.push(model);
         }
 
-        Ok(count)
+        Ok(collected_models)
     }
 }

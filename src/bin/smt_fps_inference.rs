@@ -4,9 +4,6 @@ use biodivine_lib_param_bn::symbolic_async_graph::SymbolicAsyncGraph;
 use clap::Parser;
 use std::fs;
 
-// TODO: make this CLI arg
-const LIMIT: usize = 1;
-
 /// Structure to collect CLI arguments
 #[derive(Parser)]
 #[clap(about = "Run SMT-based BN inference using a provided PSBN and fixed-point specification.")]
@@ -16,14 +13,24 @@ struct Arguments {
 
     /// Path to a file with fixed-point dataset in CSV format.
     specification_path: String,
+
+    /// Maximum allowed Hamming distance from the specification.
+    #[clap(default_value_t = 0)]
+    max_hamming_distance: usize,
 }
 
-/// Run SMT inference, iterating over all fixed-point solutions,
-/// from optimal to least.
+/// Run SMT inference, iterating over all fixed-point solutions, from optimal to least.
 ///
-/// TODO: for now, we only iterate solutions until `LIMIT` Hamming distance is exceeded
+/// For now, this only makes sense for uniform weights. This is why we use Hamming
+/// distance as a "quality" metric.
+///
+/// TODO: for now, we only iterate solutions until limit Hamming distance is exceeded
 /// TODO: for now, the blocking strategy is set for fixed-point states only
-fn run_smt_inference(bn: &BooleanNetwork, dataset_spec: &Dataset) -> Result<(), String> {
+fn run_smt_inference(
+    bn: &BooleanNetwork,
+    dataset_spec: &Dataset,
+    max_hamming_distance: usize,
+) -> Result<(), String> {
     // Build the ASTG and print summary
     let stg = SymbolicAsyncGraph::new(bn)?;
     println!("Total variables: {}", bn.variables().count());
@@ -43,17 +50,17 @@ fn run_smt_inference(bn: &BooleanNetwork, dataset_spec: &Dataset) -> Result<(), 
     // Iterate solutions, processing each via the callback.
     // The callback summarizes the solution model fixed points, and
     // computes Hamming distance to the original specification.
-    inference_problem.get_solutions(&blocker_strategy, |model| {
+    inference_problem.get_solutions(&blocker_strategy, None, |model| {
         solution_count += 1;
-        println!("\n=== Solution {} ===", solution_count);
 
         // Go over all the specified fixed points and find their version in the model
         // Compute total missmatches (Hamming dist)
         let mut total_mismatches: usize = 0;
+        let mut fix_state_models_str = Vec::new();
         for (obs_id, obs) in &dataset_spec.observations {
             let fix_state = inference_problem.get_state(obs_id);
             let fix_state_model = fix_state.extract_state(model);
-            println!("{obs_id}: {:?}", fix_state_model);
+            fix_state_models_str.push(format!("{obs_id}: {:?}", fix_state_model));
 
             let var_map = fix_state.make_smt_var_map();
             for (var_name, required_value) in &obs.value_map {
@@ -69,12 +76,17 @@ fn run_smt_inference(bn: &BooleanNetwork, dataset_spec: &Dataset) -> Result<(), 
                 }
             }
         }
-        println!("Summed Hamming distance from specification: {total_mismatches}");
 
         // Stop iteration if mismatches exceed limit
-        if total_mismatches > LIMIT {
-            Err("Hamming distance threshold exceeded".to_string())
+        if total_mismatches > max_hamming_distance {
+            Err("Hamming distance threshold exceeded. Stopping.".to_string())
         } else {
+            println!("\n=== Solution {} ===", solution_count);
+            for fix_state_model_print in fix_state_models_str {
+                println!("{fix_state_model_print}");
+            }
+            println!("Summed Hamming distance from specification: {total_mismatches}");
+            println!("======");
             Ok(())
         }
     })?;
@@ -93,15 +105,17 @@ fn main() {
     let args = Arguments::parse();
     println!("Input PSBN model: `{}`", args.psbn_path);
     println!("Input specification data: `{}`", args.specification_path);
+    println!("Selected max Hamming distance: {}", args.max_hamming_distance);
 
     // Parse the PSBN from the AEON file
     let bn_string = fs::read_to_string(&args.psbn_path).unwrap();
     let bn = BooleanNetwork::try_from(bn_string.as_str()).unwrap();
 
     // Parse the observations (fixed-point specification) from CSV
+    // TODO: currntly only uniform 0.5 weights are supported
     let dataset_spec = Dataset::load_from_csv(&args.specification_path).unwrap();
 
-    if let Err(e) = run_smt_inference(&bn, &dataset_spec) {
-        println!("Error: {}", e);
+    if let Err(e) = run_smt_inference(&bn, &dataset_spec, args.max_hamming_distance) {
+        println!("\n{e}");
     }
 }
