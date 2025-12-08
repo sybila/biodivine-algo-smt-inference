@@ -1,15 +1,19 @@
-use crate::Dataset;
-use biodivine_lib_param_bn::BooleanNetwork;
-use std::fs;
+use crate::{Dataset, FunctionSymbolBlocker};
+use biodivine_lib_param_bn::{BooleanNetwork, ParameterId};
+use std::{collections::HashSet, fs};
 use z3::SatResult;
 
 const TOY_BN_4V_PATH: &str = "data/toy_models/4v-activ-fully-spec.aeon";
-//const TOY_PSBN_4V_PATH: &str = "data/toy_models/4v-activ-psbn.aeon";
+const TOY_PSBN_4V_PATH: &str = "data/toy_models/4v-activ-psbn.aeon";
 const TOY_SPEC_4V_PATH: &str = "data/toy_models/4v-activ-specification.csv";
 
 const MYELOID_BN_PATH: &str = "data/myeloid/myeloid-fully-specified.aeon";
 const MYELOID_DATA_SAT_PATH: &str = "data/myeloid/dataset-fps-adjusted-SAT.csv";
 const MYELOID_DATA_UNSAT_PATH: &str = "data/myeloid/dataset-fps-original-UNSAT.csv";
+
+fn empty_callback(_model: &z3::Model) -> Result<(), String> {
+    Ok(())
+}
 
 #[test]
 /// Run the test on a fully specified 4-variable model with activations only.
@@ -39,6 +43,57 @@ fn test_toy_4v_bn() {
         fix_two.extract_state(&model),
         vec![false, false, false, false]
     );
+}
+
+#[test]
+/// Run the test on a 4-variable PSBN with activations only.
+///
+/// The specification requires two fixed points '0110' (fp_1) and '0001' (fp_2)
+/// with confidence weight 0.5 on each bit value.
+///
+/// There should be two BN instances that differ in function f (with same two fixed
+/// points) that can fit the specification the closest at Hamming distance 2.
+fn test_toy_psbn_4v_bn() {
+    let bn_string = fs::read_to_string(TOY_PSBN_4V_PATH).unwrap();
+    let bn = BooleanNetwork::try_from(bn_string.as_str()).unwrap();
+    let f = ParameterId::from_index(0);
+    let dataset_spec = Dataset::load_from_csv(TOY_SPEC_4V_PATH).unwrap();
+
+    let inference_problem = dataset_spec.to_inference_problem(&bn).unwrap();
+    let fix_one = inference_problem.get_state("fp_1");
+    let fix_two = inference_problem.get_state("fp_2");
+
+    // Collect top two solutions
+    let blocker_strategy = FunctionSymbolBlocker;
+    let solutions = inference_problem
+        .get_solutions(&blocker_strategy, Some(2), empty_callback)
+        .unwrap();
+    assert_eq!(solutions.len(), 2);
+
+    // Both solutions must have the same two fixed points
+    let expected_fix1 = vec![false, true, false, false];
+    let expected_fix2 = vec![false, false, false, false];
+
+    // The two solutions differ in function model
+    let (bdd_ctx, _) = inference_problem.extract_uninterpreted_symbol(&solutions[0], f);
+    let expected_fn_solution1 = bdd_ctx.eval_expression_string("x_1");
+    let expected_fn_solution2 = bdd_ctx.eval_expression_string("((!x_0 & x_1) | x_0)");
+    let mut expected_fn_solutions = HashSet::from([expected_fn_solution1, expected_fn_solution2]);
+
+    // Check the first sat model
+    let model1 = &solutions[0];
+    assert_eq!(fix_one.extract_state(&model1), expected_fix1);
+    assert_eq!(fix_two.extract_state(&model1), expected_fix2);
+    let (_, bdd_fn1) = inference_problem.extract_uninterpreted_symbol(&model1, f);
+    assert!(expected_fn_solutions.contains(&bdd_fn1));
+    expected_fn_solutions.remove(&bdd_fn1);
+
+    // Check the second sat model (same fixed points, different function)
+    let model2 = &solutions[1];
+    assert_eq!(fix_one.extract_state(&model2), expected_fix1);
+    assert_eq!(fix_two.extract_state(&model2), expected_fix2);
+    let (_, bdd_fn2) = inference_problem.extract_uninterpreted_symbol(&model2, f);
+    assert!(expected_fn_solutions.contains(&bdd_fn2));
 }
 
 #[test]

@@ -105,7 +105,10 @@ fn main() {
     let args = Arguments::parse();
     println!("Input PSBN model: `{}`", args.psbn_path);
     println!("Input specification data: `{}`", args.specification_path);
-    println!("Selected max Hamming distance: {}", args.max_hamming_distance);
+    println!(
+        "Selected max Hamming distance: {}",
+        args.max_hamming_distance
+    );
 
     // Parse the PSBN from the AEON file
     let bn_string = fs::read_to_string(&args.psbn_path).unwrap();
