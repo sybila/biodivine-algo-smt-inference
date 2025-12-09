@@ -1,11 +1,15 @@
-use crate::{Dataset, FunctionSymbolBlocker};
+use crate::{Dataset, FixedPointBlocker, FunctionSymbolBlocker};
 use biodivine_lib_param_bn::{BooleanNetwork, ParameterId};
-use std::{collections::HashSet, fs};
+use std::collections::HashSet;
+use std::fs;
 use z3::SatResult;
 
 const TOY_BN_4V_PATH: &str = "data/toy_models/4v-activ-fully-spec.aeon";
 const TOY_PSBN_4V_PATH: &str = "data/toy_models/4v-activ-psbn.aeon";
 const TOY_SPEC_4V_PATH: &str = "data/toy_models/4v-activ-specification.csv";
+
+const TOY_DENSE_BN_4V_PATH: &str = "data/toy_models/4v-dense-fully-spec.aeon";
+const TOY_DENSE_SPEC_4V_PATH: &str = "data/toy_models/4v-dense-specification.csv";
 
 const MYELOID_BN_PATH: &str = "data/myeloid/myeloid-fully-specified.aeon";
 const MYELOID_DATA_SAT_PATH: &str = "data/myeloid/dataset-fps-adjusted-SAT.csv";
@@ -17,10 +21,11 @@ fn empty_callback(_model: &z3::Model) -> Result<(), String> {
 
 #[test]
 /// Run the test on a fully specified 4-variable model with activations only.
+///
 /// The model has three fixed points '0000', '0100', '1111'.
 /// The specification requires two fixed points '0110' (fp_1) and '0001' (fp_2)
 /// with confidence weight 0.5 on each bit value.
-fn test_toy_4v_bn() {
+fn test_toy_4v_bn_single_solution() {
     let bn_string = fs::read_to_string(TOY_BN_4V_PATH).unwrap();
     let bn = BooleanNetwork::try_from(bn_string.as_str()).unwrap();
     let dataset_spec = Dataset::load_from_csv(TOY_SPEC_4V_PATH).unwrap();
@@ -29,20 +34,84 @@ fn test_toy_4v_bn() {
     let fix_one = inference_problem.get_state("fp_1");
     let fix_two = inference_problem.get_state("fp_2");
 
-    // Result should be SAT, with both fixed points different in single bit
-    // from the specification
+    // Result should be SAT, with both optimal fixed points differing in a single
+    // bit from the specification
     let solver = inference_problem.build_solver();
     assert_eq!(solver.check(&[]), SatResult::Sat);
 
     let model = solver.get_model().unwrap();
-    assert_eq!(
-        fix_one.extract_state(&model),
-        vec![false, true, false, false]
-    );
-    assert_eq!(
-        fix_two.extract_state(&model),
-        vec![false, false, false, false]
-    );
+    let expected_fix_one = vec![false, true, false, false];
+    let expected_fix_two = vec![false, false, false, false];
+    assert_eq!(fix_one.extract_state(&model), expected_fix_one);
+    assert_eq!(fix_two.extract_state(&model), expected_fix_two);
+}
+
+#[test]
+/// Run the test on a 4-variable more complex BN.
+///
+/// The specification requires three fixed points with confidence weight 0.5
+/// on each bit value.
+///
+/// We test the top three solutions - there should be one at Hamming
+/// distance 1 and two other at Hamming distance 2.
+fn test_toy_psbn_4v_bn_multiple_solutions() {
+    let bn_string = fs::read_to_string(TOY_DENSE_BN_4V_PATH).unwrap();
+    let bn = BooleanNetwork::try_from(bn_string.as_str()).unwrap();
+    let dataset_spec = Dataset::load_from_csv(TOY_DENSE_SPEC_4V_PATH).unwrap();
+
+    let inference_problem = dataset_spec.to_inference_problem(&bn).unwrap();
+    let fix_one = inference_problem.get_state("fp_1");
+    let fix_two = inference_problem.get_state("fp_2");
+    let fix_three = inference_problem.get_state("fp_3");
+
+    // Collect top three solutions
+    let blocker_strategy = FixedPointBlocker;
+    let solutions = inference_problem
+        .get_solutions(&blocker_strategy, Some(3), empty_callback)
+        .unwrap();
+    assert_eq!(solutions.len(), 3);
+
+    // There is a single top solution in Hamming distance 3
+    let model1 = &solutions[0];
+    let expected_fix_one = vec![true, true, true, false];
+    let expected_fix_two = vec![true, false, false, true];
+    let expected_fix_three = vec![true, false, false, true];
+    assert_eq!(fix_one.extract_state(&model1), expected_fix_one);
+    assert_eq!(fix_two.extract_state(&model1), expected_fix_two);
+    assert_eq!(fix_three.extract_state(&model1), expected_fix_three);
+
+    // Then we have two more equally good combinations in Hamming distance 4
+    let expected_fixpoints_a = vec![
+        vec![true, false, false, true],
+        vec![true, false, false, true],
+        vec![true, false, false, true],
+    ];
+    let expected_fixpoints_b = vec![
+        vec![true, true, true, false],
+        vec![true, true, true, false],
+        vec![true, false, false, true],
+    ];
+    let mut expected_fp_options = HashSet::from([expected_fixpoints_a, expected_fixpoints_b]);
+
+    // Check the second solution
+    let model2 = &solutions[1];
+    let real_fixpoints_2 = vec![
+        fix_one.extract_state(&model2),
+        fix_two.extract_state(&model2),
+        fix_three.extract_state(&model2),
+    ];
+    assert!(expected_fp_options.contains(&real_fixpoints_2));
+    expected_fp_options.remove(&real_fixpoints_2);
+
+    // Check the third solution
+    let model3 = &solutions[2];
+    let real_fixpoints_3 = vec![
+        fix_one.extract_state(&model3),
+        fix_two.extract_state(&model3),
+        fix_three.extract_state(&model3),
+    ];
+    assert!(expected_fp_options.contains(&real_fixpoints_3));
+    expected_fp_options.remove(&real_fixpoints_3);
 }
 
 #[test]
@@ -52,8 +121,8 @@ fn test_toy_4v_bn() {
 /// with confidence weight 0.5 on each bit value.
 ///
 /// There should be two BN instances that differ in function f (with same two fixed
-/// points) that can fit the specification the closest at Hamming distance 2.
-fn test_toy_psbn_4v_bn() {
+/// points) that can fit the specification the closest, at Hamming distance 2.
+fn test_toy_psbn_4v_bn_multiple_functions() {
     let bn_string = fs::read_to_string(TOY_PSBN_4V_PATH).unwrap();
     let bn = BooleanNetwork::try_from(bn_string.as_str()).unwrap();
     let f = ParameterId::from_index(0);
@@ -74,7 +143,7 @@ fn test_toy_psbn_4v_bn() {
     let expected_fix1 = vec![false, true, false, false];
     let expected_fix2 = vec![false, false, false, false];
 
-    // The two solutions differ in function model
+    // The two solutions differ in function f
     let (bdd_ctx, _) = inference_problem.extract_uninterpreted_symbol(&solutions[0], f);
     let expected_fn_solution1 = bdd_ctx.eval_expression_string("x_1");
     let expected_fn_solution2 = bdd_ctx.eval_expression_string("((!x_0 & x_1) | x_0)");
@@ -98,7 +167,8 @@ fn test_toy_psbn_4v_bn() {
 
 #[test]
 /// Run the inference on a fully specified Myeloid model.
-/// For this test, we use a specification that requires four different fixed points which
+///
+/// For this test, we use a specification that requires four fixed points which
 /// are all directly satisfied.
 fn test_myeloid_bn_sat() {
     let bn_string = fs::read_to_string(MYELOID_BN_PATH).unwrap();
@@ -124,8 +194,10 @@ fn test_myeloid_bn_sat() {
 
 #[test]
 /// Run the inference on a fully specified Myeloid model.
-/// For this test, we use a specification that requires four different fixed points,
-/// and one of the values needs to be flipped for it to be satisfied.
+///
+/// For this test, we use a specification that requires four fixed points.
+/// The optimal solution is at Hamming distance 1 from the specification (one
+/// value in the Megakaryocyte observation must be flipped).
 fn test_myeloid_bn_unsat() {
     let bn_string = fs::read_to_string(MYELOID_BN_PATH).unwrap();
     let bn = BooleanNetwork::try_from(bn_string.as_str()).unwrap();
