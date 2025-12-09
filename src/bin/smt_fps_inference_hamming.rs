@@ -6,15 +6,20 @@ use std::fs;
 
 /// Structure to collect CLI arguments
 #[derive(Parser)]
-#[clap(about = "Run SMT-based BN inference using a provided PSBN and fixed-point specification.")]
+#[clap(
+    about = "Run SMT-based BN inference using a provided PSBN and ideal fixed-point \
+    specification. Find N fixed-point combinations that are closest to the ideal one \
+    based on Hamming distance."
+)]
 struct Arguments {
     /// Path to a file with a PSBN model in AEON format.
     psbn_path: String,
 
-    /// Path to a file with fixed-point dataset in CSV format.
+    /// Path to a file with fixed-point dataset specification in CSV format.
     specification_path: String,
 
-    /// Maximum allowed Hamming distance from the specification.
+    /// Maximum allowed Hamming distance between actual fixed-points
+    /// and the specification.
     #[clap(default_value_t = 0)]
     max_hamming_distance: usize,
 }
@@ -115,7 +120,7 @@ fn main() {
     let bn = BooleanNetwork::try_from(bn_string.as_str()).unwrap();
 
     // Parse the observations (fixed-point specification) from CSV
-    // TODO: currntly only uniform 0.5 weights are supported
+    // TODO: currently only uniform 0.5 weights are supported
     let dataset_spec = Dataset::load_from_csv(&args.specification_path).unwrap();
 
     if let Err(e) = run_smt_inference(&bn, &dataset_spec, args.max_hamming_distance) {
