@@ -11,6 +11,10 @@ path = "src/bin/naive_fps_inference.rs"
 name = "smt-fps-inference-hamming"
 path = "src/bin/smt_fps_inference_hamming.rs"
 
+[[bin]]
+name = "smt-fps-inference"
+path = "src/bin/smt_fps_inference.rs"
+
 [dependencies]
 biodivine-lib-param-bn = "0.6.2"
 biodivine-lib-bdd = "0.6.2"
