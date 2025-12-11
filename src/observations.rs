@@ -74,9 +74,9 @@ impl Dataset {
     ///    Observation1,0,1,0,1,0,1
     ///    Observation2,1,0,*,1,0,*
     ///
-    /// TODO: Add weights
+    /// TODO: Add same functionality with weights
     ///
-    pub fn from_csv(csv_content: &str) -> Result<Dataset, String> {
+    pub fn from_csv_uniform_weights(csv_content: &str) -> Result<Dataset, String> {
         let mut reader = csv::Reader::from_reader(csv_content.as_bytes());
 
         // parse variable names from the header (skip ID column)
@@ -163,9 +163,9 @@ impl Dataset {
 
     /// Load a dataset from a given CSV file. Reads the file into a string and then parses it
     /// into a dataset using [Self::from_csv].
-    pub fn load_from_csv(csv_path: &str) -> Result<Dataset, String> {
+    pub fn load_from_csv_uniform_weights(csv_path: &str) -> Result<Dataset, String> {
         let csv_content = std::fs::read_to_string(csv_path).map_err(|e| e.to_string())?;
-        Self::from_csv(&csv_content)
+        Self::from_csv_uniform_weights(&csv_content)
     }
 
     /// Convert this dataset into a list of `StateSpecification` objects using the provided

@@ -22,7 +22,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bn_string = fs::read_to_string(psbn_path)?;
     let bn = BooleanNetwork::try_from(bn_string.as_str())?;
     // Parse the observations (fixed-point specification) from CSV
-    let dataset_spec = Dataset::load_from_csv(csv_path)?;
+    let dataset_spec = Dataset::load_from_csv_uniform_weights(csv_path)?;
 
     run_inference(&bn, &dataset_spec)?;
 

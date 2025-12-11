@@ -18,7 +18,7 @@ const MYELOID_DATA_UNSAT_PATH: &str = "data/myeloid/dataset-fps-original-UNSAT.c
 fn test_toy_model_4v_bn() {
     let bn_string = fs::read_to_string(TOY_MODEL_4V_PATH).unwrap();
     let bn = BooleanNetwork::try_from(bn_string.as_str()).unwrap();
-    let dataset_spec = Dataset::load_from_csv(TOY_SPEC_4V_PATH).unwrap();
+    let dataset_spec = Dataset::load_from_csv_uniform_weights(TOY_SPEC_4V_PATH).unwrap();
 
     // There is a single optimal specification with 01*0 and 000*
     let mut optimal_solutions = run_naive_inference(&bn, &dataset_spec).unwrap();
@@ -43,8 +43,9 @@ fn test_toy_model_4v_bn() {
 fn test_myeloid_bn() {
     let bn_string = fs::read_to_string(MYELOID_BN_PATH).unwrap();
     let bn = BooleanNetwork::try_from(bn_string.as_str()).unwrap();
-    let dataset_spec_sat = Dataset::load_from_csv(MYELOID_DATA_SAT_PATH).unwrap();
-    let dataset_spec_unsat = Dataset::load_from_csv(MYELOID_DATA_UNSAT_PATH).unwrap();
+    let dataset_spec_sat = Dataset::load_from_csv_uniform_weights(MYELOID_DATA_SAT_PATH).unwrap();
+    let dataset_spec_unsat =
+        Dataset::load_from_csv_uniform_weights(MYELOID_DATA_UNSAT_PATH).unwrap();
 
     // The first specification is matched without needing to remove any constraints
     let mut optimal_solutions = run_naive_inference(&bn, &dataset_spec_sat).unwrap();

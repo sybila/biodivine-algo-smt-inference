@@ -1,4 +1,4 @@
-use biodivine_algo_smt_inference::{Dataset, FixedPointBlocker};
+use biodivine_algo_smt_inference::{BlockingStrategy, Dataset};
 use biodivine_lib_param_bn::BooleanNetwork;
 use biodivine_lib_param_bn::symbolic_async_graph::SymbolicAsyncGraph;
 use clap::Parser;
@@ -49,7 +49,7 @@ fn run_smt_inference(
     let inference_problem = dataset_spec.to_inference_problem(bn)?;
 
     // Use the FixedPointBlocker strategy to iterate over solutions
-    let blocker_strategy = FixedPointBlocker;
+    let blocker_strategy = BlockingStrategy::FixedPoints;
     let mut solution_count = 0;
 
     // Iterate solutions, processing each via the callback.
@@ -121,7 +121,7 @@ fn main() {
 
     // Parse the observations (fixed-point specification) from CSV
     // TODO: currently only uniform 0.5 weights are supported
-    let dataset_spec = Dataset::load_from_csv(&args.specification_path).unwrap();
+    let dataset_spec = Dataset::load_from_csv_uniform_weights(&args.specification_path).unwrap();
 
     if let Err(e) = run_smt_inference(&bn, &dataset_spec, args.max_hamming_distance) {
         println!("\n{e}");

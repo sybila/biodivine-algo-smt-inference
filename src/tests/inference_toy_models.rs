@@ -1,4 +1,4 @@
-use crate::{Dataset, FixedPointBlocker, FunctionSymbolBlocker};
+use crate::{BlockingStrategy, Dataset};
 use biodivine_lib_param_bn::{BooleanNetwork, ParameterId};
 use std::collections::HashSet;
 use std::fs;
@@ -28,7 +28,7 @@ fn empty_callback(_model: &z3::Model) -> Result<(), String> {
 fn test_toy_4v_bn_single_solution() {
     let bn_string = fs::read_to_string(TOY_BN_4V_PATH).unwrap();
     let bn = BooleanNetwork::try_from(bn_string.as_str()).unwrap();
-    let dataset_spec = Dataset::load_from_csv(TOY_SPEC_4V_PATH).unwrap();
+    let dataset_spec = Dataset::load_from_csv_uniform_weights(TOY_SPEC_4V_PATH).unwrap();
 
     let inference_problem = dataset_spec.to_inference_problem(&bn).unwrap();
     let fix_one = inference_problem.get_state("fp_1");
@@ -57,7 +57,7 @@ fn test_toy_4v_bn_single_solution() {
 fn test_toy_psbn_4v_bn_multiple_solutions() {
     let bn_string = fs::read_to_string(TOY_DENSE_BN_4V_PATH).unwrap();
     let bn = BooleanNetwork::try_from(bn_string.as_str()).unwrap();
-    let dataset_spec = Dataset::load_from_csv(TOY_DENSE_SPEC_4V_PATH).unwrap();
+    let dataset_spec = Dataset::load_from_csv_uniform_weights(TOY_DENSE_SPEC_4V_PATH).unwrap();
 
     let inference_problem = dataset_spec.to_inference_problem(&bn).unwrap();
     let fix_one = inference_problem.get_state("fp_1");
@@ -65,7 +65,7 @@ fn test_toy_psbn_4v_bn_multiple_solutions() {
     let fix_three = inference_problem.get_state("fp_3");
 
     // Collect top three solutions
-    let blocker_strategy = FixedPointBlocker;
+    let blocker_strategy = BlockingStrategy::FixedPoints;
     let solutions = inference_problem
         .get_solutions(&blocker_strategy, Some(3), empty_callback)
         .unwrap();
@@ -126,14 +126,14 @@ fn test_toy_psbn_4v_bn_multiple_functions() {
     let bn_string = fs::read_to_string(TOY_PSBN_4V_PATH).unwrap();
     let bn = BooleanNetwork::try_from(bn_string.as_str()).unwrap();
     let f = ParameterId::from_index(0);
-    let dataset_spec = Dataset::load_from_csv(TOY_SPEC_4V_PATH).unwrap();
+    let dataset_spec = Dataset::load_from_csv_uniform_weights(TOY_SPEC_4V_PATH).unwrap();
 
     let inference_problem = dataset_spec.to_inference_problem(&bn).unwrap();
     let fix_one = inference_problem.get_state("fp_1");
     let fix_two = inference_problem.get_state("fp_2");
 
     // Collect top two solutions
-    let blocker_strategy = FunctionSymbolBlocker;
+    let blocker_strategy = BlockingStrategy::Interpretation;
     let solutions = inference_problem
         .get_solutions(&blocker_strategy, Some(2), empty_callback)
         .unwrap();
@@ -173,7 +173,7 @@ fn test_toy_psbn_4v_bn_multiple_functions() {
 fn test_myeloid_bn_sat() {
     let bn_string = fs::read_to_string(MYELOID_BN_PATH).unwrap();
     let bn = BooleanNetwork::try_from(bn_string.as_str()).unwrap();
-    let dataset_spec = Dataset::load_from_csv(MYELOID_DATA_SAT_PATH).unwrap();
+    let dataset_spec = Dataset::load_from_csv_uniform_weights(MYELOID_DATA_SAT_PATH).unwrap();
 
     let inference_problem = dataset_spec.to_inference_problem(&bn).unwrap();
 
@@ -201,7 +201,7 @@ fn test_myeloid_bn_sat() {
 fn test_myeloid_bn_unsat() {
     let bn_string = fs::read_to_string(MYELOID_BN_PATH).unwrap();
     let bn = BooleanNetwork::try_from(bn_string.as_str()).unwrap();
-    let dataset_spec = Dataset::load_from_csv(MYELOID_DATA_UNSAT_PATH).unwrap();
+    let dataset_spec = Dataset::load_from_csv_uniform_weights(MYELOID_DATA_UNSAT_PATH).unwrap();
 
     let inference_problem = dataset_spec.to_inference_problem(&bn).unwrap();
 

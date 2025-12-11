@@ -27,7 +27,7 @@ pub use naive_inference::{loosen_specification, run_naive_inference};
 
 /// Blocking clause strategies for iterating over multiple unique solutions.
 pub mod blocking;
-pub use blocking::{BlockingStrategy, CombinedBlocker, FixedPointBlocker, FunctionSymbolBlocker};
+pub use blocking::BlockingStrategy;
 
 /// A module for collectively storing non-trivial tests, because we will probably need
 /// quite a few of them (simpler unit tests can still go into the modules of the tested code)
@@ -314,7 +314,7 @@ impl InferenceProblem {
     /// be used for on-the-fly logging or to stop computation when some condition is met.
     pub fn get_solutions<F>(
         &self,
-        strategy: &dyn BlockingStrategy,
+        strategy: &BlockingStrategy,
         max_solutions: Option<usize>,
         mut callback: F,
     ) -> Result<Vec<z3::Model>, String>
