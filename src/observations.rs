@@ -162,7 +162,7 @@ impl Dataset {
     }
 
     /// Load a dataset from a given CSV file. Reads the file into a string and then parses it
-    /// into a dataset using [Self::from_csv].
+    /// into a dataset using [Self::from_csv_uniform_weights].
     pub fn load_from_csv_uniform_weights(csv_path: &str) -> Result<Dataset, String> {
         let csv_content = std::fs::read_to_string(csv_path).map_err(|e| e.to_string())?;
         Self::from_csv_uniform_weights(&csv_content)
