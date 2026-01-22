@@ -1,17 +1,43 @@
-use biodivine_algo_smt_inference::{InferenceProblem, StateSpecification};
+use biodivine_algo_smt_inference::{InferenceProblem, SmtState, StateSpecification};
 use biodivine_lib_param_bn::BooleanNetwork;
 use csv::ReaderBuilder;
 use num_rational::BigRational;
 use num_traits::{FromPrimitive, ToPrimitive, Zero};
 use std::collections::BTreeMap;
 use std::fs::File;
+use z3::Model;
 use z3::ast::Dynamic;
 
 fn main() {
-    let obs_path = "./data/neural_differentiation/table_scc_observations.tsv";
-    let conf_path = "./data/neural_differentiation/table_scc_confidence.tsv";
+    let args = std::env::args().collect::<Vec<_>>();
+    assert_eq!(
+        args.len(),
+        4,
+        "Expected 3 arguments: (scc | full) (retain_hard | override_soft) #retained_monotonicity_constraints"
+    );
 
-    let (obs_genes, obs_cells, obs_data) = load_table(obs_path);
+    let problem_type = args[1].clone();
+    assert!(
+        problem_type == "scc" || problem_type == "full",
+        "First argument must be `scc` or `full`"
+    );
+
+    let retain_hard = args[2] == "retain_hard";
+    assert!(
+        args[2] == "retain_hard" || args[2] == "override_soft",
+        "Second argument must be `retain_hard` or `override_soft`"
+    );
+
+    let retained_monotonicity = args[3]
+        .parse::<usize>()
+        .expect("Third argument must be a non-negative integer");
+
+    let obs_path =
+        format!("./data/neural_differentiation/table_{problem_type}_observations_filtered.tsv");
+    let conf_path =
+        format!("./data/neural_differentiation/table_{problem_type}_confidence_filtered.tsv");
+
+    let (obs_genes, obs_cells, obs_data) = load_table(obs_path.as_str());
     println!(
         "Loaded observations from {}: {} genes, {} cell types",
         obs_path,
@@ -19,7 +45,7 @@ fn main() {
         obs_cells.len()
     );
 
-    let (conf_genes, conf_cells, conf_data) = load_table(conf_path);
+    let (conf_genes, conf_cells, conf_data) = load_table(conf_path.as_str());
     println!(
         "Loaded confidence from {}: {} genes, {} cell types",
         conf_path,
@@ -35,13 +61,16 @@ fn main() {
         .map(|it| (it.clone(), StateSpecification::new()))
         .collect::<BTreeMap<_, _>>();
 
-    let mut model =
-        BooleanNetwork::try_from_file("./data/neural_differentiation/omnipath_largest_scc.aeon")
-            .unwrap();
-    strip_monotonicity(&mut model);
+    let mut model = BooleanNetwork::try_from_file(format!(
+        "./data/neural_differentiation/omnipath_{problem_type}.aeon"
+    ))
+    .unwrap();
+
+    strip_monotonicity(&mut model, retained_monotonicity);
+
     let model = model.name_implicit_parameters();
 
-    let mut max_objective = BigRational::zero();
+    let mut total_weights = BigRational::zero();
     for (gene, (obs_row, conf_row)) in obs_genes.iter().zip(obs_data.iter().zip(conf_data.iter())) {
         let Some(gene_id) = model.as_graph().find_variable(gene) else {
             continue;
@@ -55,10 +84,17 @@ fn main() {
                 let obs = *obs == 1.0;
                 let specification = observations.get_mut(cell_type).unwrap();
                 if *conf == 1.0 {
-                    specification.assert_must(gene_id, obs);
+                    if retain_hard {
+                        specification.assert_must(gene_id, obs);
+                    } else {
+                        // Overriding "must" assertions to ensure the query is always satisfiable.
+                        let conf = BigRational::from_f64(0.9999999).unwrap();
+                        total_weights += &conf;
+                        specification.assert_may(gene_id, obs, &conf);
+                    }
                 } else {
                     let conf = BigRational::from_f64(*conf).unwrap();
-                    max_objective += &conf;
+                    total_weights += &conf;
                     specification.assert_may(gene_id, obs, &conf);
                 }
             }
@@ -86,19 +122,74 @@ fn main() {
     println!("Starting solver...");
 
     let solver = inference.build_solver();
+
+    let states_copy = states.clone();
+    let observations_copy = observations.clone();
+    solver.register_model_handler(move |result| {
+        println!("Solver made progress!");
+        print_solver_model(result, &states_copy, &observations_copy);
+    });
+
     println!("Has solution? {:?}", solver.check(&[]));
     println!(
-        "Optimal solution has error {} (max error is {})",
+        "Optimal solution has penalty {} (max possible penalty is {})",
         parse_fraction(solver.get_lower(0).unwrap()),
-        max_objective.to_f64().unwrap()
+        total_weights.to_f64().unwrap()
     );
 
-    let result = solver.get_model().unwrap();
+    if let Some(result) = solver.get_model() {
+        print_solver_model(&result, &states, &observations);
+    }
+}
 
-    for (cell, state) in states {
-        println!("Cell: {cell}");
-        let req = observations.get(&cell).unwrap();
-        let inferred_state = state.extract_state(&result);
+fn parse_fraction(ast: Dynamic) -> f64 {
+    ast.as_real().unwrap().approx_f64()
+}
+
+fn strip_monotonicity(model: &mut BooleanNetwork, mut retain: usize) {
+    for mut reg in model.as_graph().regulations().cloned().collect::<Vec<_>>() {
+        if reg.monotonicity.is_none() {
+            // Non-monotonic regulations are just ignored.
+            continue;
+        }
+
+        if retain > 0 {
+            // We retain the first X monotonic regulations we encounter.
+            retain -= 1;
+            continue;
+        }
+
+        // Otherwise replace the regulation with a new, non-monotonic one.
+        model
+            .as_graph_mut()
+            .remove_regulation(reg.regulator, reg.target)
+            .unwrap();
+        reg.monotonicity = None;
+        model.as_graph_mut().add_raw_regulation(reg).unwrap();
+    }
+
+    let still_monotonic = model
+        .as_graph()
+        .regulations()
+        .filter(|it| it.monotonicity.is_some())
+        .count();
+    println!(
+        "After filtering, number of monotonic regulations is: {}",
+        still_monotonic
+    );
+}
+
+fn print_solver_model(
+    model: &Model,
+    states: &BTreeMap<String, SmtState>,
+    observations: &BTreeMap<String, StateSpecification>,
+) {
+    println!("==== Model ====");
+    let mut total_penalty = BigRational::zero();
+    for (cell, state) in states.iter() {
+        print!("\t > Cell: {cell}; ");
+        let req = observations.get(cell).unwrap();
+        let inferred_state = state.extract_state(model);
         let mut penalty = BigRational::zero();
         let mut missed = 0;
         for (var, conf) in req.make_optional_assertion_map() {
@@ -109,25 +200,12 @@ fn main() {
             }
         }
         println!(
-            "Missed: {missed} with penalty {}",
+            "Missed: {missed} observations with penalty {}",
             penalty.to_f64().unwrap()
         );
+        total_penalty += penalty;
     }
-}
-
-fn parse_fraction(ast: Dynamic) -> f64 {
-    ast.as_real().unwrap().approx_f64()
-}
-
-fn strip_monotonicity(model: &mut BooleanNetwork) {
-    for mut reg in model.as_graph().regulations().cloned().collect::<Vec<_>>() {
-        model
-            .as_graph_mut()
-            .remove_regulation(reg.regulator, reg.target)
-            .unwrap();
-        reg.monotonicity = None;
-        model.as_graph_mut().add_raw_regulation(reg).unwrap();
-    }
+    println!("Total penalty: {}", total_penalty.to_f64().unwrap());
 }
 
 fn load_table(path: &str) -> (Vec<String>, Vec<String>, Vec<Vec<Option<f64>>>) {
@@ -135,7 +213,7 @@ fn load_table(path: &str) -> (Vec<String>, Vec<String>, Vec<Vec<Option<f64>>>) {
     let mut rdr = ReaderBuilder::new().delimiter(b'\t').from_reader(file);
 
     let headers = rdr.headers().unwrap().clone();
-    // First column is "gene", skip it to get cell types
+    // The first column is "gene", skip it to get cell types
     let cell_types: Vec<String> = headers.iter().skip(1).map(|s| s.to_string()).collect();
 
     let mut genes = Vec::new();
