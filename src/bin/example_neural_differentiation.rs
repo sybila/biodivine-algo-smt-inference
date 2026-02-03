@@ -1,4 +1,5 @@
-use biodivine_algo_smt_inference::{InferenceProblem, SmtState, StateSpecification};
+use biodivine_algo_smt_inference::MonotoneSMTSolver;
+use biodivine_algo_smt_inference::{EncodingMode, InferenceProblem, SmtState, StateSpecification};
 use biodivine_lib_param_bn::BooleanNetwork;
 use csv::ReaderBuilder;
 use num_rational::BigRational;
@@ -12,8 +13,8 @@ fn main() {
     let args = std::env::args().collect::<Vec<_>>();
     assert_eq!(
         args.len(),
-        4,
-        "Expected 3 arguments: (scc | full) (retain_hard | override_soft) #retained_monotonicity_constraints"
+        5,
+        "Expected 4 arguments: (scc | full) (retain_hard | override_soft) #retained_monotonicity_constraints #solver"
     );
 
     let problem_type = args[1].clone();
@@ -31,6 +32,12 @@ fn main() {
     let retained_monotonicity = args[3]
         .parse::<usize>()
         .expect("Third argument must be a non-negative integer");
+
+    let solver_class = &args[4];
+    assert!(
+        args[4] == "quantified" || args[4] == "instantiation",
+        "Fourth argument must be `quantified` or `instantiation`"
+    );
 
     let obs_path =
         format!("./data/neural_differentiation/table_{problem_type}_observations_filtered.tsv");
@@ -121,16 +128,20 @@ fn main() {
 
     println!("Starting solver...");
 
-    let solver = inference.build_solver();
+    let solver = if solver_class == "quantified" {
+        inference.build_solver(EncodingMode::Quantified)
+    } else {
+        inference.build_solver(EncodingMode::Instantiation)
+    };
 
     let states_copy = states.clone();
     let observations_copy = observations.clone();
-    solver.register_model_handler(move |result| {
+    solver.register_model_handler(Box::new(move |result| {
         println!("Solver made progress!");
         print_solver_model(result, &states_copy, &observations_copy);
-    });
+    }));
 
-    println!("Has solution? {:?}", solver.check(&[]));
+    println!("Has solution? {:?}", solver.check());
     println!(
         "Optimal solution has penalty {} (max possible penalty is {})",
         parse_fraction(solver.get_lower(0).unwrap()),

@@ -1,4 +1,4 @@
-use biodivine_algo_smt_inference::{BlockingStrategy, Dataset};
+use biodivine_algo_smt_inference::{BlockingStrategy, Dataset, EncodingMode};
 use biodivine_lib_param_bn::BooleanNetwork;
 use biodivine_lib_param_bn::symbolic_async_graph::SymbolicAsyncGraph;
 use clap::Parser;
@@ -54,42 +54,48 @@ fn run_smt_inference(
     // Iterate solutions, processing each via the callback.
     // The callback summarizes the solution model fixed points and
     // function interpretations
-    inference_problem.get_solutions(&blocker_strategy, None, |model| {
-        if solution_count >= limit {
-            return Err("Solutions limit exceeded. Stopping.".to_string());
-        }
-        solution_count += 1;
+    inference_problem.get_solutions(
+        EncodingMode::Instantiation,
+        &blocker_strategy,
+        None,
+        |model| {
+            if solution_count >= limit {
+                return Err("Solutions limit exceeded. Stopping.".to_string());
+            }
+            solution_count += 1;
 
-        // Go over all the fixed points and function symbols in the model
-        let mut fix_state_models_str = Vec::new();
-        for obs_id in dataset_spec.observations.keys() {
-            let fix_state = inference_problem.get_state(obs_id);
-            let fix_state_model = fix_state.extract_state(model);
-            fix_state_models_str.push(format!("{obs_id}: {:?}", fix_state_model));
-        }
+            // Go over all the fixed points and function symbols in the model
+            let mut fix_state_models_str = Vec::new();
+            for obs_id in dataset_spec.observations.keys() {
+                let fix_state = inference_problem.get_state(obs_id);
+                let fix_state_model = fix_state.extract_state(model);
+                fix_state_models_str.push(format!("{obs_id}: {:?}", fix_state_model));
+            }
 
-        let mut fn_interpretations_str = Vec::new();
-        for param_id in bn.parameters() {
-            let param_name = bn.get_parameter(param_id).get_name();
-            let (bdd_ctx, fn_bdd) = inference_problem.extract_uninterpreted_symbol(model, param_id);
-            let bdd_expression = fn_bdd.to_boolean_expression(&bdd_ctx);
-            fn_interpretations_str.push(format!(
-                "{}: {:?}",
-                param_name,
-                bdd_expression.to_string()
-            ));
-        }
+            let mut fn_interpretations_str = Vec::new();
+            for param_id in bn.parameters() {
+                let param_name = bn.get_parameter(param_id).get_name();
+                let (bdd_ctx, fn_bdd) =
+                    inference_problem.extract_uninterpreted_symbol(model, param_id);
+                let bdd_expression = fn_bdd.to_boolean_expression(&bdd_ctx);
+                fn_interpretations_str.push(format!(
+                    "{}: {:?}",
+                    param_name,
+                    bdd_expression.to_string()
+                ));
+            }
 
-        println!("\n=== Solution {} ===", solution_count);
-        for fix_state_model_print in fix_state_models_str {
-            println!("{fix_state_model_print}");
-        }
-        for fn_model_print in fn_interpretations_str {
-            println!("{fn_model_print}");
-        }
-        println!("======");
-        Ok(())
-    })?;
+            println!("\n=== Solution {} ===", solution_count);
+            for fix_state_model_print in fix_state_models_str {
+                println!("{fix_state_model_print}");
+            }
+            for fn_model_print in fn_interpretations_str {
+                println!("{fn_model_print}");
+            }
+            println!("======");
+            Ok(())
+        },
+    )?;
 
     if solution_count == 0 {
         println!("No matching specification found");

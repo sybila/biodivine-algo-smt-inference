@@ -3,12 +3,17 @@ use biodivine_lib_bdd::{Bdd, BddVariableSet, ValuationsOfClauseIterator};
 use biodivine_lib_param_bn::Monotonicity::Activation;
 use biodivine_lib_param_bn::{BooleanNetwork, FnUpdate, ParameterId, VariableId};
 use std::collections::{BTreeMap, BTreeSet};
-use z3::ast::{Ast, Bool, forall_const};
+use z3::ast::{Ast, Bool};
 use z3::{FuncDecl, Model, Sort};
 
 /// A data structure which defines one state that is supposed to exist in a BN.
 mod smt_state;
 pub use smt_state::SmtState;
+
+mod monotone_smt;
+pub use monotone_smt::{
+    InstantiationMonotoneSMTSolver, MonotoneSMTSolver, QuantifiedMonotoneSMTSolver,
+};
 
 /// Utility methods for generating logical expressions for the SMT solver.
 mod expression_generators;
@@ -43,6 +48,11 @@ pub struct InferenceProblem {
     state_declarations: BTreeMap<String, SmtState>,
     state_specification: BTreeMap<String, StateSpecification>,
     fixed_points: BTreeSet<String>,
+}
+
+pub enum EncodingMode {
+    Quantified,
+    Instantiation,
 }
 
 impl InferenceProblem {
@@ -214,10 +224,46 @@ impl InferenceProblem {
     }
 
     /// Build a [`z3::Optimize`] solver instance that implements all prescribed constraints.
-    pub fn build_solver(&self) -> z3::Optimize {
-        let solver = z3::Optimize::new();
+    pub fn build_solver(&self, encoding: EncodingMode) -> Box<dyn MonotoneSMTSolver> {
+        let mut solver: Box<dyn MonotoneSMTSolver> = match encoding {
+            EncodingMode::Quantified => Box::new(QuantifiedMonotoneSMTSolver::new()),
+            EncodingMode::Instantiation => Box::new(InstantiationMonotoneSMTSolver::new()),
+        };
 
-        // First, assert that all state specifications are satisfied:
+        // let mut solver = QuantifiedMonotoneSMTSolver::new();
+
+        // First, declare all monotonicity constraints
+        for reg in self.network.as_graph().regulations() {
+            if let Some(m) = reg.monotonicity {
+                let update = self.get_update_function(reg.target);
+                let (fun_id, index) = match update {
+                    FnUpdate::Param(id, params) => (
+                        id,
+                        params
+                            .iter()
+                            .position(|p| match p {
+                                FnUpdate::Var(v) => *v == reg.regulator,
+                                _ => false,
+                            })
+                            .expect(
+                                "Monotonicity constraints are allowed only for function arguments.",
+                            ),
+                    ),
+                    _ => panic!("Only function monotonicity constraints are supported."),
+                };
+                let fun = &self
+                    .uninterpreted_symbols
+                    .get(fun_id)
+                    .expect("Invalid parameter id.");
+                if m == Activation {
+                    solver.set_monotone(fun, index);
+                } else {
+                    solver.set_antimonotone(fun, index);
+                }
+            }
+        }
+
+        // Assert that all state specifications are satisfied:
         for (name, specification) in &self.state_specification {
             let state = self.get_state(name);
             for (bn_var, value) in specification.make_required_assertion_map() {
@@ -229,23 +275,11 @@ impl InferenceProblem {
             for (bn_var, (value, confidence)) in specification.make_optional_assertion_map() {
                 let smt_var = state.get_smt_var(bn_var);
                 let assertion = if value { smt_var } else { smt_var.not() };
-                solver.assert_soft(&assertion, confidence, None);
+                solver.assert_soft(&assertion, confidence);
             }
         }
 
-        // Second, assert that every state that should be a fixed-point is a fixed-point:
-        for name in &self.fixed_points {
-            let state = self.get_state(name);
-            let state_var_map = state.make_smt_var_map();
-            for (bn_var, smt_var) in &state_var_map {
-                let update = self.get_update_function(*bn_var);
-                let smt_update =
-                    fn_update_to_smt(update, &state_var_map, &self.uninterpreted_symbols);
-                solver.assert(&smt_var.iff(smt_update));
-            }
-        }
-
-        // Finally, assert that essential/monotonic regulations have their respective properties:
+        // Assert that essential regulations have their respective properties:
         for reg in self.network.as_graph().regulations() {
             let update = self.get_update_function(reg.target);
 
@@ -266,37 +300,17 @@ impl InferenceProblem {
                     fn_update_to_smt(update, &map, &self.uninterpreted_symbols);
                 solver.assert(&fn_update_reg_true.iff(fn_update_reg_false).not());
             }
+        }
 
-            if let Some(m) = reg.monotonicity {
-                // Declare a new state `ACT` or `INH` where for every such state holds that
-                // `update(ACT[r=0]) <= update(ACT[r=1])` (symmetrically for `INH`).
-                let key = if m == Activation { "act" } else { "inh" };
-                let monotonicity_name = format!(
-                    "{}_{}_{}",
-                    key,
-                    reg.regulator.to_index(),
-                    reg.target.to_index()
-                );
-                let smt_state = SmtState::new(monotonicity_name.as_str(), &self.network);
-                let mut map = smt_state.make_smt_var_map();
-                map.insert(reg.regulator, Bool::from_bool(true));
-                let fn_update_reg_true =
-                    fn_update_to_smt(update, &map, &self.uninterpreted_symbols);
-                map.insert(reg.regulator, Bool::from_bool(false));
-                let fn_update_reg_false =
-                    fn_update_to_smt(update, &map, &self.uninterpreted_symbols);
-
-                let assertion = if m == Activation {
-                    fn_update_reg_false.implies(fn_update_reg_true)
-                } else {
-                    fn_update_reg_true.implies(fn_update_reg_false)
-                };
-
-                solver.assert(&forall_const(
-                    &smt_state.make_dyn_smt_vars(),
-                    &[],
-                    &assertion,
-                ));
+        // Finally, assert that every state that should be a fixed-point is a fixed-point:
+        for name in &self.fixed_points {
+            let state = self.get_state(name);
+            let state_var_map = state.make_smt_var_map();
+            for (bn_var, smt_var) in &state_var_map {
+                let update = self.get_update_function(*bn_var);
+                let smt_update =
+                    fn_update_to_smt(update, &state_var_map, &self.uninterpreted_symbols);
+                solver.assert(&smt_var.iff(smt_update));
             }
         }
 
@@ -314,6 +328,7 @@ impl InferenceProblem {
     /// be used for on-the-fly logging or to stop computation when some condition is met.
     pub fn get_solutions<F>(
         &self,
+        encoding: EncodingMode,
         strategy: &BlockingStrategy,
         max_solutions: Option<usize>,
         mut callback: F,
@@ -321,7 +336,7 @@ impl InferenceProblem {
     where
         F: FnMut(&z3::Model) -> Result<(), String>,
     {
-        let solver = self.build_solver();
+        let mut solver = self.build_solver(encoding);
         let mut collected_models = Vec::new();
 
         loop {
@@ -332,7 +347,7 @@ impl InferenceProblem {
             }
 
             // Check for satisfiability and stop if not sat
-            if solver.check(&[]) != z3::SatResult::Sat {
+            if solver.check() != z3::SatResult::Sat {
                 break;
             }
 

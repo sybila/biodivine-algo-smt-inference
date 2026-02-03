@@ -1,4 +1,4 @@
-use biodivine_algo_smt_inference::{BlockingStrategy, Dataset};
+use biodivine_algo_smt_inference::{BlockingStrategy, Dataset, EncodingMode};
 use biodivine_lib_param_bn::BooleanNetwork;
 use biodivine_lib_param_bn::symbolic_async_graph::SymbolicAsyncGraph;
 use clap::Parser;
@@ -55,46 +55,51 @@ fn run_smt_inference(
     // Iterate solutions, processing each via the callback.
     // The callback summarizes the solution model fixed points, and
     // computes Hamming distance to the original specification.
-    inference_problem.get_solutions(&blocker_strategy, None, |model| {
-        solution_count += 1;
+    inference_problem.get_solutions(
+        EncodingMode::Instantiation,
+        &blocker_strategy,
+        None,
+        |model| {
+            solution_count += 1;
 
-        // Go over all the specified fixed points and find their version in the model
-        // Compute total missmatches (Hamming dist)
-        let mut total_mismatches: usize = 0;
-        let mut fix_state_models_str = Vec::new();
-        for (obs_id, obs) in &dataset_spec.observations {
-            let fix_state = inference_problem.get_state(obs_id);
-            let fix_state_model = fix_state.extract_state(model);
-            fix_state_models_str.push(format!("{obs_id}: {:?}", fix_state_model));
+            // Go over all the specified fixed points and find their version in the model
+            // Compute total missmatches (Hamming dist)
+            let mut total_mismatches: usize = 0;
+            let mut fix_state_models_str = Vec::new();
+            for (obs_id, obs) in &dataset_spec.observations {
+                let fix_state = inference_problem.get_state(obs_id);
+                let fix_state_model = fix_state.extract_state(model);
+                fix_state_models_str.push(format!("{obs_id}: {:?}", fix_state_model));
 
-            let var_map = fix_state.make_smt_var_map();
-            for (var_name, required_value) in &obs.value_map {
-                // Map variable name -> VariableId using the BooleanNetwork (bn)
-                let var_id = bn.as_graph().find_variable(var_name).unwrap();
+                let var_map = fix_state.make_smt_var_map();
+                for (var_name, required_value) in &obs.value_map {
+                    // Map variable name -> VariableId using the BooleanNetwork (bn)
+                    let var_id = bn.as_graph().find_variable(var_name).unwrap();
 
-                if let Some(smt_var) = var_map.get(&var_id) {
-                    let interp = model.get_const_interp(smt_var).unwrap();
-                    let model_val = interp.as_bool().unwrap();
-                    if model_val != *required_value {
-                        total_mismatches += 1;
+                    if let Some(smt_var) = var_map.get(&var_id) {
+                        let interp = model.get_const_interp(smt_var).unwrap();
+                        let model_val = interp.as_bool().unwrap();
+                        if model_val != *required_value {
+                            total_mismatches += 1;
+                        }
                     }
                 }
             }
-        }
 
-        // Stop iteration if mismatches exceed limit
-        if total_mismatches > max_hamming_distance {
-            Err("Hamming distance threshold exceeded. Stopping.".to_string())
-        } else {
-            println!("\n=== Solution {} ===", solution_count);
-            for fix_state_model_print in fix_state_models_str {
-                println!("{fix_state_model_print}");
+            // Stop iteration if mismatches exceed limit
+            if total_mismatches > max_hamming_distance {
+                Err("Hamming distance threshold exceeded. Stopping.".to_string())
+            } else {
+                println!("\n=== Solution {} ===", solution_count);
+                for fix_state_model_print in fix_state_models_str {
+                    println!("{fix_state_model_print}");
+                }
+                println!("Summed Hamming distance from specification: {total_mismatches}");
+                println!("======");
+                Ok(())
             }
-            println!("Summed Hamming distance from specification: {total_mismatches}");
-            println!("======");
-            Ok(())
-        }
-    })?;
+        },
+    )?;
 
     if solution_count == 0 {
         println!("No matching specification found");
