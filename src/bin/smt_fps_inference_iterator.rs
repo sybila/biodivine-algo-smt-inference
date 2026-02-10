@@ -45,7 +45,8 @@ fn run_smt_inference(
     println!("{}", dataset_spec.to_debug_string());
     println!("------");
 
-    let inference_problem = dataset_spec.to_inference_problem(bn)?;
+    let dummy_weight = 0.5;
+    let inference_problem = dataset_spec.to_inference_problem(bn, Some(dummy_weight))?;
 
     // Use the FixedPointBlocker strategy to iterate over solutions
     let blocker_strategy = make_blocker(blocking_str)?;

@@ -1,4 +1,3 @@
-use biodivine_algo_smt_inference::MonotoneSMTSolver;
 use biodivine_algo_smt_inference::{EncodingMode, InferenceProblem, SmtState, StateSpecification};
 use biodivine_lib_param_bn::BooleanNetwork;
 use csv::ReaderBuilder;

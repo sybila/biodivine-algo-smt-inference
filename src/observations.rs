@@ -66,6 +66,19 @@ pub struct Dataset {
 }
 
 impl Dataset {
+    pub fn new(observations: BTreeMap<String, Observation>) -> Dataset {
+        let variables = observations
+            .values()
+            .next()
+            .map(|obs| obs.value_map.keys().cloned().collect())
+            .unwrap_or_default();
+
+        Dataset {
+            observations,
+            variables,
+        }
+    }
+
     /// Parse a dataset from a CSV string. The header line specifies variables, following lines
     /// represent individual observations (id and values).
     ///
@@ -172,14 +185,19 @@ impl Dataset {
     /// `BooleanNetwork` to map variable names to `VariableId` indices.
     ///
     /// Each observation in the dataset becomes a `StateSpecification` where all observed
-    /// values are asserted as a "may" constraints with uniform weight (0.5).
+    /// values are asserted as a constraints:
+    /// - if arg `use_may_constraints` is None, hard "must" constraints are used
+    /// - if arg `use_may_constraints` is set to some value (0-1), soft "may" constraints
+    ///   are used with this uniform weight
     ///
-    /// Returns an error if any variable name in the dataset does not exist in the network.
+    /// Returns an error if any variable name in the dataset does not exist in the network,
+    /// or if the weight in `use_may_constraints` is not between 0 and 1.
     ///
-    /// TODO: Add proper weights
+    /// TODO: Add option for non-uniform weights
     pub fn to_specification_list(
         &self,
         network: &BooleanNetwork,
+        use_may_constraints: Option<f32>,
     ) -> Result<BTreeMap<String, StateSpecification>, String> {
         let mut specs = BTreeMap::new();
 
@@ -195,8 +213,12 @@ impl Dataset {
                     .find_variable(var_name)
                     .ok_or_else(|| format!("Variable '{}' not found in the network", var_name))?;
 
-                let weight = BigRational::from_f32(0.5).unwrap();
-                spec.assert_may(var_id, *value, &weight);
+                if let Some(weight_val) = use_may_constraints {
+                    let weight = BigRational::from_f32(weight_val).unwrap();
+                    spec.assert_may(var_id, *value, &weight);
+                } else {
+                    spec.assert_must(var_id, *value);
+                }
             }
 
             specs.insert(obs_id.clone(), spec);
@@ -208,17 +230,19 @@ impl Dataset {
     /// Combine this dataset with the provided `BooleanNetwork` into an `InferenceProblem`
     /// instance.
     ///
-    /// The dataset is used to derive fixed-point specification. See [`Self::to_specification_list`]
-    /// for details.
+    /// The dataset is used to derive fixed-point specification. Arg `use_may_constraints`
+    /// specifies whether to use soft constraints with uniform weights or hard constraints
+    /// for observation values. See [`Self::to_specification_list`] for details.
     ///
     /// Returns an error if any variable name in the dataset does not exist in the network.
     ///
-    /// TODO: Add proper weights
+    /// TODO: Add option for non-uniform weights
     pub fn to_inference_problem(
         &self,
         network: &BooleanNetwork,
+        use_may_constraints: Option<f32>,
     ) -> Result<InferenceProblem, String> {
-        let specs = self.to_specification_list(network)?;
+        let specs = self.to_specification_list(network, use_may_constraints)?;
 
         let mut problem = InferenceProblem::new(network.clone());
         for (obs_id, obs_specification) in specs {
