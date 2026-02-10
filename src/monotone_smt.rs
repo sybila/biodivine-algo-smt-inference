@@ -264,9 +264,9 @@ impl MonotoneSMTSolver for InstantiationMonotoneSMTSolver {
     }
 
     fn check(&self) -> SatResult {
-        println!("{} monotonicity lemmas", self.num_lemmas);
+        // println!("{} monotonicity lemmas", self.num_lemmas);
         let res = self.smt_solver.check(&[]);
-        println!("{:?}", self.smt_solver.get_statistics());
+        // println!("{:?}", self.smt_solver.get_statistics());
         res
     }
 

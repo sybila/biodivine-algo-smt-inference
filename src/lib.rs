@@ -236,6 +236,14 @@ impl InferenceProblem {
         for reg in self.network.as_graph().regulations() {
             if let Some(m) = reg.monotonicity {
                 let update = self.get_update_function(reg.target);
+
+                // Uncomment to ignore monotonicities for fully defined functions
+                /* 
+                if update.collect_parameters().is_empty() {
+                    continue;
+                }
+                */
+
                 let (fun_id, index) = match update {
                     FnUpdate::Param(id, params) => (
                         id,
