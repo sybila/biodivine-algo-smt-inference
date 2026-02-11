@@ -75,7 +75,7 @@ impl MonotoneSMTSolver for QuantifiedMonotoneSMTSolver {
 
     fn check(&self) -> SatResult {
         let res = self.smt_solver.check(&[]);
-        println!("{:?}", self.smt_solver.get_statistics());
+        // println!("{:?}", self.smt_solver.get_statistics());
         res
     }
 
