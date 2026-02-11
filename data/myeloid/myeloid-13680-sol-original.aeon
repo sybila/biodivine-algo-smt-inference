@@ -1,0 +1,32 @@
+Gfi1 -| cjun
+EKLF -| Fli1
+PU1 -> cjun
+CEBPa -> CEBPa
+Fli1 -| EKLF
+GATA1 -> SCL
+CEBPa -> Gfi1
+EgrNab -| Gfi1
+GATA1 -> FOG1
+Gfi1 -| EgrNab
+GATA2 -> GATA2
+PU1 -> EgrNab
+PU1 -| GATA2
+GATA1 -> GATA1
+GATA1 -| CEBPa
+PU1 -| GATA1
+GATA1 -| PU1
+GATA1 -| GATA2
+PU1 -| SCL
+GATA1 -> EKLF
+FOG1 -| CEBPa
+FOG1 -| GATA2
+Fli1 -> GATA1
+cjun -> EgrNab
+CEBPa -> PU1
+GATA2 -> GATA1
+SCL -| CEBPa
+GATA2 -| PU1
+GATA1 -> Fli1
+PU1 -> PU1
+$CEBPa: CEBPa & !(GATA1 & FOG1 & SCL)
+$PU1: (CEBPa | PU1) & !(GATA1 | GATA2)
