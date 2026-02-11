@@ -29,6 +29,9 @@ fn make_dyn_vec(asts: &[Bool]) -> Vec<&dyn Ast> {
 
 impl QuantifiedMonotoneSMTSolver {
     pub fn new() -> Self {
+        // Gets rid of the "WARNING: optimization with quantified constraints is not supported"
+        z3::set_global_param("warning", "false");
+
         QuantifiedMonotoneSMTSolver {
             smt_solver: z3::Optimize::new(),
         }
@@ -74,9 +77,12 @@ impl MonotoneSMTSolver for QuantifiedMonotoneSMTSolver {
     }
 
     fn check(&self) -> SatResult {
+        /* 
         let res = self.smt_solver.check(&[]);
-        // println!("{:?}", self.smt_solver.get_statistics());
+        println!("{:?}", self.smt_solver.get_statistics());
         res
+        */
+        self.smt_solver.check(&[])
     }
 
     fn get_model(&self) -> Option<Model> {
@@ -89,6 +95,12 @@ impl MonotoneSMTSolver for QuantifiedMonotoneSMTSolver {
 
     fn register_model_handler(&self, callback: Box<dyn Fn(&Model)>) {
         self.smt_solver.register_model_handler(callback);
+    }
+}
+
+impl Default for QuantifiedMonotoneSMTSolver {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -264,10 +276,13 @@ impl MonotoneSMTSolver for InstantiationMonotoneSMTSolver {
     }
 
     fn check(&self) -> SatResult {
-        // println!("{} monotonicity lemmas", self.num_lemmas);
+        /*
+        println!("{} monotonicity lemmas", self.num_lemmas);
         let res = self.smt_solver.check(&[]);
-        // println!("{:?}", self.smt_solver.get_statistics());
+        println!("{:?}", self.smt_solver.get_statistics());
         res
+        */
+        self.smt_solver.check(&[])
     }
 
     fn get_model(&self) -> Option<Model> {
@@ -280,5 +295,11 @@ impl MonotoneSMTSolver for InstantiationMonotoneSMTSolver {
 
     fn register_model_handler(&self, callback: Box<dyn Fn(&Model)>) {
         self.smt_solver.register_model_handler(callback);
+    }
+}
+
+impl Default for InstantiationMonotoneSMTSolver {
+    fn default() -> Self {
+        Self::new()
     }
 }

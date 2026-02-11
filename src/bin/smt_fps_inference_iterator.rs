@@ -45,6 +45,8 @@ fn run_smt_inference(
     println!("{}", dataset_spec.to_debug_string());
     println!("------");
 
+    // TODO: add CLI option to choose whether use hard X soft constraints on fixed points
+    //let inference_problem = dataset_spec.to_inference_problem(bn, None)?;
     let dummy_weight = 0.5;
     let inference_problem = dataset_spec.to_inference_problem(bn, Some(dummy_weight))?;
 
@@ -127,6 +129,7 @@ fn main() {
     // Parse the PSBN from the AEON file
     let bn_string = fs::read_to_string(&args.psbn_path).unwrap();
     let bn = BooleanNetwork::try_from(bn_string.as_str()).unwrap();
+    let bn = bn.name_implicit_parameters();
 
     // Parse the observations (fixed-point specification) from CSV
     // TODO: currently only uniform 0.5 weights are supported

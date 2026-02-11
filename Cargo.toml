@@ -3,18 +3,6 @@ name = "biodivine-algo-smt-inference"
 version = "0.1.0"
 edition = "2024"
 
-[[bin]]
-name = "naive-fps-inference"
-path = "src/bin/naive_fps_inference.rs"
-
-[[bin]]
-name = "smt-fps-inference-hamming"
-path = "src/bin/smt_fps_inference_hamming.rs"
-
-[[bin]]
-name = "smt-fps-inference-iterator"
-path = "src/bin/smt_fps_inference_iterator.rs"
-
 [dependencies]
 biodivine-lib-param-bn = "0.6.2"
 biodivine-lib-bdd = "0.6.2"

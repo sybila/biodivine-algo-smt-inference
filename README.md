@@ -18,10 +18,16 @@ Here, `$TYPE` is either `scc` (smaller problem) or `full` (larger problem). `$OV
  > For the `full` variant, `retain_hard` option always returns `unsat`. Only `override_soft` returns valid solutions. For the `scc` variant, both options should work, but can differ in computation time.
 
 ### Prototype binary for benchmarking
-There is now a prototype (not fully tested yet) binary to run the SMT-based inference on AEON file with a PSBN model and fixed point annotations. It currently computes a single solution. Compile and run it as 
+There are now two prototype (not fully tested yet) binaries to run the SMT-based inference on AEON file with a PSBN model and fixed point annotations. 
+
+Binary `smt_benchmarking_prototype` currently computes a single solution (that can be extracted and saved). Compile and run it using the command below, or use `--help` flag for more information on arguments and additional options (currently `verbose` & `output-path`).
 
 ```
 cargo run --release --bin smt_benchmarking_prototype [OPTIONS] <MODEL_PATH> <SOLVER>
 ```
 
-Use `--help` flag for more information on options and arguments.
+Binary `smt_benchmarking_prototype_multi` currently enumerates multiple solutions using a simple (and inefficient) blocking strategy. Compile and run it using the command below, or use `--help` flag for more information on arguments and additional options (currently `verbose` & `limit`).
+
+```
+cargo run --release --bin smt_benchmarking_prototype_multi [OPTIONS] <MODEL_PATH> <SOLVER> --limit <N>
+```

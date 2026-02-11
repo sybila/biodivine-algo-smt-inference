@@ -203,6 +203,51 @@ impl InferenceProblem {
         (bdd_ctx, bdd)
     }
 
+    /// Extract a BooleanNetwork instance from a model by collecting interpretations of
+    /// all uninterpreted functions.
+    ///
+    /// WARNING: This simplified approach only works if each variable's update function
+    /// consists of a single uninterpreted fn applied to the variable's regulators.
+    ///
+    /// See [Self::extract_uninterpreted_symbol] for details on how function symbols are
+    /// extracted from the model. This wrapper only aggregates the functions and renames
+    /// the arguments to match BN variables.
+    ///
+    /// # Panics
+    ///
+    /// Method fails if the original PSBN had update expressions that are not a single
+    /// uninterpreted function applied to the variable's regulators.
+    pub fn extract_bn_instance_simplified(&self, model: &Model) -> BooleanNetwork {
+        let psbn = self.get_network();
+        let mut bn_instance = psbn.clone();
+        for variable in psbn.variables() {
+            let update_fn = psbn.get_update_function(variable).clone().unwrap();
+            if let FnUpdate::Param(param_id, args) = update_fn {
+                let (bdd_ctx, fn_bdd) = self.extract_uninterpreted_symbol(model, param_id);
+                let mut bdd_string = fn_bdd.to_boolean_expression(&bdd_ctx).to_string();
+                let mut renaming = BTreeMap::new();
+                for (i, arg) in args.iter().enumerate() {
+                    assert!(matches!(arg, FnUpdate::Var(_)));
+                    renaming.insert(format!("x_{}", i), format!("({})", arg.to_string(psbn)));
+                }
+
+                let mut keys: Vec<_> = renaming.keys().cloned().collect();
+                keys.sort_by_key(|k| std::cmp::Reverse(k.len()));
+                for key in keys {
+                    bdd_string = bdd_string.replace(&key, &renaming[&key]);
+                }
+
+                let update = FnUpdate::try_from_str(&bdd_string, &bn_instance).unwrap();
+                bn_instance
+                    .set_update_function(variable, Some(update))
+                    .unwrap();
+            } else {
+                panic!("Unexpected update fn format.");
+            }
+        }
+        bn_instance
+    }
+
     /// Assert that the state referenced by the given `name` must follow the specification
     /// of the given `observation`.
     ///
@@ -238,7 +283,7 @@ impl InferenceProblem {
                 let update = self.get_update_function(reg.target);
 
                 // Uncomment to ignore monotonicities for fully defined functions
-                /* 
+                /*
                 if update.collect_parameters().is_empty() {
                     continue;
                 }

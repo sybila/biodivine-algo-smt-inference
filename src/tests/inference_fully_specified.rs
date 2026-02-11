@@ -1,6 +1,6 @@
+use crate::InferenceProblem;
 use crate::state_specification::StateSpecification;
 use crate::tests::get_instatiation_solver;
-use crate::InferenceProblem;
 use biodivine_lib_param_bn::{BooleanNetwork, FnUpdate, VariableId};
 use num_rational::BigRational;
 use num_traits::FromPrimitive;

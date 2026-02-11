@@ -1,45 +1,47 @@
 use biodivine_algo_smt_inference::{BlockingStrategy, EncodingMode};
 use biodivine_algo_smt_inference::{Dataset, Observation};
-use biodivine_lib_param_bn::{BooleanNetwork, FnUpdate, ModelAnnotation};
+use biodivine_lib_param_bn::{BooleanNetwork, ModelAnnotation};
 use clap::Parser;
 use clap::builder::PossibleValuesParser;
 use std::collections::BTreeMap;
 
 #[derive(Parser)]
-#[clap(about = "SMT benchmarking prototype for BN inference.")]
+#[clap(about = "SMT benchmarking prototype for BN inference (solution enumeration).")]
 struct Arguments {
     /// Path to AEON file with a PSBN model and fixed point annotations.
     model_path: String,
+
     /// Solver class to use.
     #[clap(value_parser = PossibleValuesParser::new(["quantified", "instantiation"]))]
     solver: String,
-    /// Enable verbose output.
+
+    /// Enable verbose output (otherwise, only number of solutions is printed at the end).
     #[clap(short, long)]
     verbose: bool,
-    /// Path to save the resulting BN model.
-    #[clap(short, long)]
-    output_path: Option<String>,
-    /// Maximum solutions that will be enumerated (note that enumeration is not that fast).
-    #[clap(long = "limit", default_value_t = 1)]
+
+    /// Maximum solutions that will be enumerated (note that enumeration is a bottleneck
+    /// at the moment).
+    #[clap(short, long, default_value_t = 1)]
     limit: usize,
 }
 
 fn main() {
     let args = Arguments::parse();
 
+    let solution_limit = args.limit;
     let solver_mode = if args.solver == "quantified" {
         EncodingMode::Quantified
     } else {
         EncodingMode::Instantiation
     };
 
-    let solution_limit = args.limit;
-
     let model_string = std::fs::read_to_string(&args.model_path).unwrap();
     let psbn = BooleanNetwork::try_from(model_string.as_str()).unwrap();
     let psbn = psbn.name_implicit_parameters();
 
-    // Load observation data and create constraints
+    if args.verbose {
+        println!("Loading observations and collecting fixed-point specification...");
+    }
     let annotations = ModelAnnotation::from_model_string(&model_string);
     let mut observations = BTreeMap::new();
     if let Some(fix_node) = annotations.get_child(&["fix"]) {
@@ -56,123 +58,53 @@ fn main() {
             observations.insert(fp_id.to_string(), Observation::from_value_map(map));
         }
     }
-
     let dataset = Dataset::new(observations);
     // Use data as hard constraints
     let inference = dataset.to_inference_problem(&psbn, None).unwrap();
 
     if args.verbose {
-        println!("Building solver...");
+        println!("Building and starting solver...");
     }
 
-    // Use the FixedPointBlocker strategy to iterate over solutions
-    let blocker_strategy = BlockingStrategy::Interpretation;
+    // Iterate over SAT BN interpretations using a simple interpretation blocking strategy.
+    // The callback just logs a new solution, the commented out part also summarizes
+    // the function interpretations of the model
     let mut solution_count = 0;
-
-    // Iterate solutions, processing each via the callback.
-    // The callback summarizes the function interpretations of the model
-    inference.get_solutions(
+    let _ = inference.get_solutions(
         solver_mode,
-        &blocker_strategy,
+        &BlockingStrategy::Interpretation,
         None,
-        |model| {
+        |_model| {
             if solution_count >= solution_limit {
                 return Err("Solutions limit exceeded. Stopping.".to_string());
             }
-            solution_count += 1;
-            // println!("{:?}", model);
-
-            // Reconstruct the BN instance using the interpretations of the z3 model
-            // This is very basic and works only if each variable's update is single
-            // uninterpreted fn applied to its regulators
-            let psbn = inference.get_network();
-            let mut bn_instance = psbn.clone();
-            for variable in psbn.variables() {
-                let update_fn = psbn.get_update_function(variable).clone().unwrap();
-                if let FnUpdate::Param(param_id, args) = update_fn {
-                    let (bdd_ctx, fn_bdd) = inference.extract_uninterpreted_symbol(&model, param_id);
-                    let mut bdd_string = fn_bdd.to_boolean_expression(&bdd_ctx).to_string();
-                    let mut renaming = BTreeMap::new();
-                    for (i, arg) in args.iter().enumerate() {
-                        assert!(matches!(arg, FnUpdate::Var(_)));
-                        renaming.insert(format!("x_{}", i), format!("({})", arg.to_string(psbn)));
-                    }
-
-                    let mut keys: Vec<_> = renaming.keys().cloned().collect();
-                    keys.sort_by_key(|k| std::cmp::Reverse(k.len()));
-                    for key in keys {
-                        bdd_string = bdd_string.replace(&key, &renaming[&key]);
-                    }
-
-                    let update = FnUpdate::try_from_str(&bdd_string, &bn_instance).unwrap();
-                    bn_instance.set_update_function(variable, Some(update)).unwrap();
-                } else {
-                    panic!("Unexpected update fn format.");
-                }
+            if args.verbose {
+                println!("Found new SAT solution.");
+                // println!("{:?}", model);
             }
+            solution_count += 1;
+
+            /*
+            // Reconstruct the BN instance using the interpretations of the z3 model
+            // This works well as long as all update functions are just an uninterpreted
+            // function applied to variable's regulators.
+            let bn_instance = inference.extract_bn_instance_simplified(model);
             print!("\n{}", bn_instance.to_string());
             println!("===========");
+            */
             Ok(())
         },
-    ).unwrap();
+    );
 
     if solution_count == 0 {
-        println!("No matching specification found");
-    } else {
-        println!("\nTotal solutions found: {}", solution_count);
-    }
-
-    /*
-    if args.verbose {
-        solver.register_model_handler(Box::new(move |_| {
-            println!("Solver made progress!");
-        }));
-    }
-
-    if args.verbose {
-        println!("Checking for solution...");
-    }
-
-    let result = solver.check();
-    if args.verbose {
-        println!("Has solution? {:?}", result);
-    } else {
-        let res = if result == SatResult::Sat { 1 } else { 0 };
-        println!("{}", res);
-    }
-
-    if result == SatResult::Sat {
-        if let Some(output_path) = args.output_path {
-            let model = solver.get_model().unwrap();
-            println!("{:?}", model);
-            let psbn = inference.get_network();
-            let mut bn_instance = psbn.clone();
-            for variable in psbn.variables() {
-                let update_fn = psbn.get_update_function(variable).clone().unwrap();
-                if let FnUpdate::Param(param_id, args) = update_fn {
-                    let (bdd_ctx, fn_bdd) = inference.extract_uninterpreted_symbol(&model, param_id);
-                    let mut bdd_string = fn_bdd.to_boolean_expression(&bdd_ctx).to_string();
-                    println!("{}: {bdd_string}", psbn.get_variable_name(variable));
-                    let mut renaming = BTreeMap::new();
-                    for (i, arg) in args.iter().enumerate() {
-                        assert!(matches!(arg, FnUpdate::Var(_)));
-                        renaming.insert(format!("x_{}", i), format!("({})", arg.to_string(psbn)));
-                    }
-
-                    let mut keys: Vec<_> = renaming.keys().cloned().collect();
-                    keys.sort_by_key(|k| std::cmp::Reverse(k.len()));
-                    for key in keys {
-                        bdd_string = bdd_string.replace(&key, &renaming[&key]);
-                    }
-
-                    let update = FnUpdate::try_from_str(&bdd_string, &bn_instance).unwrap();
-                    bn_instance.set_update_function(variable, Some(update)).unwrap();
-                } else {
-                    panic!("Unexpected update fn format.");
-                }
-            }
-            std::fs::write(output_path, bn_instance.to_string()).unwrap();
+        if args.verbose {
+            println!("No satisfying solution was found.");
+        } else {
+            println!("0");
         }
+    } else if args.verbose {
+            println!("Total solutions found: {solution_count} (limit was set to {solution_limit})");
+    } else {
+        println!("{solution_count}");
     }
-    */
 }
