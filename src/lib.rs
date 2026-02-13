@@ -370,8 +370,9 @@ impl InferenceProblem {
         solver
     }
 
-    /// Iterate over all satisfying solutions using the provided blocking strategy.
-    /// Maximum of `max_solutions` solutions will be returned.
+    /// Iterate over satisfying solutions using the provided blocking strategy.
+    /// If a limit `max_solutions` is provided, only the given number of solutions will
+    /// be enumerated (note that at least one solution is always checked).
     ///
     /// This method builds a solver, checks for satisfiability, and uses the provided strategy
     /// to generate blocking clauses to exclude each found solution from subsequent checks.
@@ -379,6 +380,8 @@ impl InferenceProblem {
     ///
     /// For now, we use a `callback` function to process each solution as we go. This can
     /// be used for on-the-fly logging or to stop computation when some condition is met.
+    /// We allow the callback to return error and finish the computation from the outside
+    /// for convenience. It is recommended to use `max_solutions` for solution limit though.
     pub fn get_solutions<F>(
         &self,
         encoding: EncodingMode,
@@ -393,21 +396,26 @@ impl InferenceProblem {
         let mut collected_models = Vec::new();
 
         loop {
-            if let Some(max) = max_solutions
-                && collected_models.len() >= max
-            {
-                break;
-            }
-
             // Check for satisfiability and stop if not sat
             if solver.check() != z3::SatResult::Sat {
                 break;
             }
 
+            // The model will be pushed to `collected_models` at the end of the
+            // iteration to avoid passing the reference there and back
             let model = solver
                 .get_model()
                 .ok_or("Failed to get model from solver")?;
             callback(&model)?;
+
+            // If a solution limit is specified and reached, we immediately
+            // break before generating the blocking clause (since that can be
+            // resource demanding)
+            if let Some(max) = max_solutions
+                && collected_models.len() + 1 >= max
+            {
+                break;
+            }
 
             // Generate and assert a blocking clause
             match strategy.generate_blocker(&model, self) {

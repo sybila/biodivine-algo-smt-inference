@@ -53,9 +53,9 @@ fn run_smt_inference(
     let blocker_strategy = BlockingStrategy::FixedPoints;
     let mut solution_count = 0;
 
-    // Iterate solutions, processing each via the callback.
-    // The callback summarizes the solution model fixed points, and
-    // computes Hamming distance to the original specification.
+    // Iterate solutions, processing each via the callback. The callback summarizes
+    // the solution model fixed points, and computes Hamming distance to the original
+    // specification. Once a limit Hamming distance is reached, computation stops.
     inference_problem.get_solutions(
         EncodingMode::Instantiation,
         &blocker_strategy,

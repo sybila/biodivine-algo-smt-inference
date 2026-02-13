@@ -67,22 +67,19 @@ fn main() {
     }
 
     // Iterate over SAT BN interpretations using a simple interpretation blocking strategy.
-    // The callback just logs a new solution, the commented out part also summarizes
-    // the function interpretations of the model
+    // The callback just logs a new solution, the commented out part would also print the
+    // BN instance extracted from the z3 model.
     let mut solution_count = 0;
     let _ = inference.get_solutions(
         solver_mode,
         &BlockingStrategy::Interpretation,
-        None,
+        Some(solution_limit),
         |_model| {
-            if solution_count >= solution_limit {
-                return Err("Solutions limit exceeded. Stopping.".to_string());
-            }
+            solution_count += 1;
             if args.verbose {
-                println!("Found new SAT solution.");
+                println!("Found new SAT solution ({solution_count}).");
                 // println!("{:?}", model);
             }
-            solution_count += 1;
 
             /*
             // Reconstruct the BN instance using the interpretations of the z3 model
@@ -103,7 +100,7 @@ fn main() {
             println!("0");
         }
     } else if args.verbose {
-            println!("Total solutions found: {solution_count} (limit was set to {solution_limit})");
+        println!("Total solutions found: {solution_count} (limit was set to {solution_limit})");
     } else {
         println!("{solution_count}");
     }

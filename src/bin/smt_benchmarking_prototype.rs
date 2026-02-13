@@ -83,17 +83,18 @@ fn main() {
 
     // If we have a model and output path was given, save it
     if result == SatResult::Sat
-        && let Some(output_path) = args.output_path {
-            let model = solver.get_model().unwrap();
-            // println!("{:?}", model);
-            if args.verbose {
-                println!("Saving BN at: {output_path}");
-            }
+        && let Some(output_path) = args.output_path
+    {
+        let model = solver.get_model().unwrap();
+        println!("{:?}", model);
+        if args.verbose {
+            println!("Saving BN at: {output_path}");
+        }
 
-            // Reconstruct the BN instance using the functions extracted from the z3 model
-            // This works well as long as all update functions are just an uninterpreted
-            // function applied to variable's regulators.
-            let bn_instance = inference.extract_bn_instance_simplified(&model);
-            std::fs::write(output_path, bn_instance.to_string()).unwrap();
+        // Reconstruct the BN instance using the functions extracted from the z3 model
+        // This works well as long as all update functions are just an uninterpreted
+        // function applied to variable's regulators.
+        let bn_instance = inference.extract_bn_instance_simplified(&model);
+        std::fs::write(output_path, bn_instance.to_string()).unwrap();
     }
 }

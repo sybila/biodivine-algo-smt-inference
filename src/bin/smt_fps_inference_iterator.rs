@@ -60,11 +60,8 @@ fn run_smt_inference(
     inference_problem.get_solutions(
         EncodingMode::Instantiation,
         &blocker_strategy,
-        None,
+        Some(limit),
         |model| {
-            if solution_count >= limit {
-                return Err("Solutions limit exceeded. Stopping.".to_string());
-            }
             solution_count += 1;
 
             // Go over all the fixed points and function symbols in the model
@@ -103,7 +100,7 @@ fn run_smt_inference(
     if solution_count == 0 {
         println!("No matching specification found");
     } else {
-        println!("\nTotal solutions found: {}", solution_count);
+        println!("\nTotal solutions found: {solution_count} (selected max limit: {limit})");
     }
 
     Ok(())
