@@ -34,8 +34,8 @@ fn main() {
 
     let solver_class = &args[4];
     assert!(
-        args[4] == "quantified" || args[4] == "instantiation",
-        "Fourth argument must be `quantified` or `instantiation`"
+        args[4] == "quantified" || args[4] == "instantiation" || args[4] == "lazy",
+        "Fourth argument must be `quantified`, `instantiation` or `lazy`"
     );
 
     let obs_path =
@@ -127,11 +127,14 @@ fn main() {
 
     println!("Starting solver...");
 
-    let solver = if solver_class == "quantified" {
-        inference.build_solver(EncodingMode::Quantified)
+    let solver_mode = if solver_class == "quantified" {
+        EncodingMode::Quantified
+    } else if solver_class == "instantiation" {
+        EncodingMode::Instantiation
     } else {
-        inference.build_solver(EncodingMode::Instantiation)
+        EncodingMode::LazyInstantiation
     };
+    let solver = inference.build_solver(solver_mode);
 
     let states_copy = states.clone();
     let observations_copy = observations.clone();

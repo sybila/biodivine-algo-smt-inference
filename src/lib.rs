@@ -1,4 +1,5 @@
 use crate::expression_generators::fn_update_to_smt;
+use crate::monotone_smt::LazyInstantiationMonotoneSMTSolver;
 use biodivine_lib_bdd::{Bdd, BddVariableSet, ValuationsOfClauseIterator};
 use biodivine_lib_param_bn::Monotonicity::Activation;
 use biodivine_lib_param_bn::{BooleanNetwork, FnUpdate, ParameterId, VariableId};
@@ -53,6 +54,7 @@ pub struct InferenceProblem {
 pub enum EncodingMode {
     Quantified,
     Instantiation,
+    LazyInstantiation,
 }
 
 impl InferenceProblem {
@@ -273,6 +275,7 @@ impl InferenceProblem {
         let mut solver: Box<dyn MonotoneSMTSolver> = match encoding {
             EncodingMode::Quantified => Box::new(QuantifiedMonotoneSMTSolver::new()),
             EncodingMode::Instantiation => Box::new(InstantiationMonotoneSMTSolver::new()),
+            EncodingMode::LazyInstantiation => Box::new(LazyInstantiationMonotoneSMTSolver::new()),
         };
 
         // let mut solver = QuantifiedMonotoneSMTSolver::new();

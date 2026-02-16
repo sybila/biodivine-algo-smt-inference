@@ -57,7 +57,7 @@ fn run_smt_inference(
     // the solution model fixed points, and computes Hamming distance to the original
     // specification. Once a limit Hamming distance is reached, computation stops.
     inference_problem.get_solutions(
-        EncodingMode::Instantiation,
+        EncodingMode::Quantified,
         &blocker_strategy,
         None,
         |model| {

@@ -12,7 +12,7 @@ struct Arguments {
     model_path: String,
 
     /// Solver class to use.
-    #[clap(value_parser = PossibleValuesParser::new(["quantified", "instantiation"]))]
+    #[clap(value_parser = PossibleValuesParser::new(["quantified", "instantiation", "lazy"]))]
     solver: String,
 
     /// Enable verbose output (otherwise, only number of solutions is printed at the end).
@@ -31,8 +31,10 @@ fn main() {
     let solution_limit = args.limit;
     let solver_mode = if args.solver == "quantified" {
         EncodingMode::Quantified
-    } else {
+    } else if args.solver == "instantiation" {
         EncodingMode::Instantiation
+    } else {
+        EncodingMode::LazyInstantiation
     };
 
     let model_string = std::fs::read_to_string(&args.model_path).unwrap();
@@ -78,7 +80,7 @@ fn main() {
             solution_count += 1;
             if args.verbose {
                 println!("Found new SAT solution ({solution_count}).");
-                // println!("{:?}", model);
+                println!("{:?}", _model);
             }
 
             /*

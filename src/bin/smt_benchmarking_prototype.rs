@@ -13,7 +13,7 @@ struct Arguments {
     model_path: String,
 
     /// Solver class to use.
-    #[clap(value_parser = PossibleValuesParser::new(["quantified", "instantiation"]))]
+    #[clap(value_parser = PossibleValuesParser::new(["quantified", "instantiation", "lazy"]))]
     solver: String,
 
     /// Enable verbose output (otherwise, only "0" or "1" is printed at the end).
@@ -58,17 +58,15 @@ fn main() {
     if args.verbose {
         println!("Building solver using `{}` encoding..", args.solver);
     }
-    let solver = if args.solver == "quantified" {
-        inference.build_solver(EncodingMode::Quantified)
+    let solver_mode = if args.solver == "quantified" {
+        EncodingMode::Quantified
+    } else if args.solver == "instantiation" {
+        EncodingMode::Instantiation
     } else {
-        inference.build_solver(EncodingMode::Instantiation)
+        EncodingMode::LazyInstantiation
     };
 
-    if args.verbose {
-        solver.register_model_handler(Box::new(move |_| {
-            println!("Solver made progress!");
-        }));
-    }
+    let solver = inference.build_solver(solver_mode);
 
     if args.verbose {
         println!("Checking for solution...");

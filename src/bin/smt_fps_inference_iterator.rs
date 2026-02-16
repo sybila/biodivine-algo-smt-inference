@@ -58,7 +58,7 @@ fn run_smt_inference(
     // The callback summarizes the solution model fixed points and
     // function interpretations
     inference_problem.get_solutions(
-        EncodingMode::Instantiation,
+        EncodingMode::Quantified,
         &blocker_strategy,
         Some(limit),
         |model| {
