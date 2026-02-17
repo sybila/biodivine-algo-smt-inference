@@ -353,13 +353,106 @@ impl Default for InstantiationMonotoneSMTSolver {
         Self::new()
     }
 }
+/// Enum to specify literals in DNF clauses (positive/negative/missing).
+pub enum LiteralValue {
+    Positive,
+    Negative,
+    Missing,
+}
+
+/// Simplified representation for a dnf clause for a fixed number of variables.
+/// For now, it is just a vector of ternary values specifying if particular variable
+/// is used as positive/negative literal, or is missing.
+pub struct DNFClause {
+    pub literals: Vec<LiteralValue>,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+/// Function application representation that allows accessing the arguments easily.
+///
+/// TODO: this is now more bloated than initially expected, should be refactored later...
+pub struct FunctionApp {
+    id: FuncDeclIdentifier,
+    full_app: Bool,
+    args: Vec<Bool>,
+}
+
+/// Extracts all uninterpreted function arguments into a vector (so that they
+/// can be easily evaluated).
+fn get_fn_app_args(app: &Bool) -> Vec<Bool> {
+    match app.decl().kind() {
+        DeclKind::UNINTERPRETED => app
+            .children()
+            .iter()
+            .map(|child: &Dynamic| child.as_bool().unwrap())
+            .collect(),
+        _ => panic!("{} is not function application", app),
+    }
+}
+
+impl FunctionApp {
+    pub fn new(id: FuncDeclIdentifier, full_app: Bool) -> Self {
+        let args = get_fn_app_args(&full_app);
+        FunctionApp { id, full_app, args }
+    }
+}
+
+/// Extracts all uninterpreted function applications from a boolean formula.
+/// Uninterpreted functions are the ones where we might enforce monotonicity.
+///
+/// TODO: merge with similar [get_function_applications]
+/// TODO: for now only works if functions are not nested (arguments do not contain
+///       other function applications).
+fn get_fn_apps_with_args(fml: &Bool) -> HashSet<FunctionApp> {
+    let mut todo = vec![fml.clone()];
+    let mut res: HashSet<FunctionApp> = HashSet::new();
+    let mut seen: HashSet<Bool> = HashSet::new();
+
+    // Traverse formula tree, collecting uninterpreted function applications
+    while let Some(cur) = todo.pop() {
+        if !cur.is_app() {
+            continue;
+        }
+
+        match cur.decl().kind() {
+            DeclKind::UNINTERPRETED => {
+                if cur.num_children() > 0 {
+                    let fn_app = FunctionApp::new(cur.decl().name(), cur);
+                    res.insert(fn_app);
+                }
+            }
+            DeclKind::TRUE | DeclKind::FALSE => {}
+            DeclKind::EQ
+            | DeclKind::AND
+            | DeclKind::OR
+            | DeclKind::NOT
+            | DeclKind::IFF
+            | DeclKind::IMPLIES => {
+                for child in cur.children() {
+                    let bool_child = child.as_bool().unwrap();
+                    if !seen.contains(&bool_child) {
+                        seen.insert(bool_child.clone());
+                        todo.push(bool_child);
+                    }
+                }
+            }
+            _ => panic!("Unsupported {}", cur),
+        }
+    }
+
+    res
+}
+
+/// Wrapper to transform bool vector to z3 compatible structure and apply
+/// function to these arguments.
+pub fn apply_fn_to_table_row(table_row: &[bool], func_decl: &FuncDecl) -> Bool {
+    let app1_bools: Vec<Bool> = table_row.iter().map(|&b| Bool::from_bool(b)).collect();
+    let app1_args: Vec<&dyn Ast> = app1_bools.iter().map(|b| b as &dyn Ast).collect();
+    func_decl.apply(&app1_args).as_bool().unwrap()
+}
 
 /// Similar to InstantiationMonotoneSMTSolver but uses lazy instantiation strategy.
-/// For this prototype, the monotonicity lemmas are build and saved with each assert, but only
-/// lazily given to the solver later as needed.
-///
-/// This is just a prototype to play with.
-/// In next version, we can do this somehow one level of function occurances?
+/// This is currently just a prototype to play with.
 pub struct LazyInstantiationMonotoneSMTSolver {
     smt_solver: z3::Optimize,
 
@@ -368,13 +461,10 @@ pub struct LazyInstantiationMonotoneSMTSolver {
 
     /// Collection of occurances of each uninterpreted functions (across encountered fixed point
     /// or essentiality constraints). These are used to build instantiated monotonicity lemmas.
-    fun_occurences: HashMap<FuncDeclIdentifier, HashSet<Bool>>,
-
-    /// Collection of all prepared monotonicity lemmas (some not yet enforced).
-    all_collected_lemmas: HashSet<Bool>,
+    fun_occurences: HashMap<FuncDeclIdentifier, HashSet<FunctionApp>>,
 
     /// Helper flag whether assert was already used, since all monotonicity constraints have
-    /// to be declared before all assertions. Monotonicity lemmas are added as part of [Self::assert].
+    /// to be declared before all assertions.
     has_asserted: bool,
 }
 
@@ -385,28 +475,18 @@ impl LazyInstantiationMonotoneSMTSolver {
             smt_solver: solver,
             monotonicity_defs: HashMap::new(),
             fun_occurences: HashMap::new(),
-            all_collected_lemmas: HashSet::new(),
             has_asserted: false,
         }
     }
 
-    /// For a newly encountered function application, create lemmas relating it to all
-    /// other already encountered applications of the same function.
-    ///
-    /// This does not assert the lemmas though, only collects them.
-    fn collect_monotonicity_lemmas(&mut self, app: &Bool) {
-        assert!(app.is_app());
-        let decl = app.decl();
-        for other in self.fun_occurences.get(&decl.name()).unwrap() {
-            if let Some(lemma) = create_monotonicity_lemma(app, other, &self.monotonicity_defs) {
-                //self.smt_solver.assert(&lemma);
-                self.all_collected_lemmas.insert(lemma);
-            }
-            if let Some(lemma) = create_monotonicity_lemma(other, app, &self.monotonicity_defs) {
-                //self.smt_solver.assert(&lemma);
-                self.all_collected_lemmas.insert(lemma);
-            }
-        }
+    fn get_monotonicity_def(
+        &self,
+        fn_id: &FuncDeclIdentifier,
+        idx: usize,
+    ) -> Option<&Monotonicity> {
+        self.monotonicity_defs
+            .get(fn_id)
+            .and_then(|defs| defs.get(&idx))
     }
 
     #[allow(dead_code)]
@@ -435,11 +515,9 @@ impl MonotoneSMTSolver for LazyInstantiationMonotoneSMTSolver {
     // Same imple as for InstantiationMonotoneSMTSolver for now.
     // TODO: maybe merge/decouple?
     fn set_antimonotone(&mut self, f: &FuncDecl, i: usize) {
-        /*
         if self.has_asserted {
             panic!("Monotonicity constraints have to be declared before all assertions.")
         }
-        */
 
         self.monotonicity_defs
             .entry(f.name())
@@ -450,39 +528,17 @@ impl MonotoneSMTSolver for LazyInstantiationMonotoneSMTSolver {
     }
 
     fn assert_soft(&mut self, formula: &Bool, weight: BigRational) {
-        /*
-        println!(
-            "> Assert soft called. Currently collected {} monotonicity lemmas and {} fn applications.",
-            self.all_collected_lemmas.len(),
-            self.count_fn_occurances()
-        );
-        println!("> Formula: {formula}");
-        */
         self.has_asserted = true;
         self.smt_solver.assert_soft(formula, weight, None);
     }
 
     fn assert(&mut self, formula: &Bool) {
-        /*
-        println!(
-            "> Assert called. Currently collected {} monotonicity lemmas and {} fn applications.",
-            self.all_collected_lemmas.len(),
-            self.count_fn_occurances()
-        );
-        println!("> Formula: \n{formula}");
-        */
         self.has_asserted = true;
         self.smt_solver.assert(formula);
 
-        let function_applications = get_function_applications(formula);
-        /*
-        println!("> Applications:");
-        function_applications
-            .iter()
-            .for_each(|app| println!("{app}"));
-        */
+        let function_applications = get_fn_apps_with_args(formula);
         for app in function_applications {
-            let name = app.decl().name();
+            let name = app.id.clone();
             if !self.monotonicity_defs.contains_key(&name) {
                 continue;
             }
@@ -490,69 +546,114 @@ impl MonotoneSMTSolver for LazyInstantiationMonotoneSMTSolver {
             let entry = self.fun_occurences.entry(name).or_default();
             if !(*entry).contains(&app) {
                 (*entry).insert(app.clone());
-                self.collect_monotonicity_lemmas(&app);
             }
         }
     }
 
     fn check(&self) -> SatResult {
-        // TODO: This system of lemma counting and printing only works if single solution
-        //       is expected. If multi solutions are iterated, the solver "forgets" it already
-        //       enforced some lemmas during the last `check` call. We should track the enforced
-        //       (or remaining) lemma globally.
+        // Iteratively search for a valid solution by lazily enforcing monotonicity.
+        // Monotonicity constraints are lazily added only for function table rows where
+        // the previous solution violates it.
 
-        // Lazily add monotonicity lemmas to the solver only when a returned solution
-        // does not satisfy them.
+        // TODO: There is lots of cloning and other inefficiencies happening in this prototype,
+        //       gotta refactor it once it is working
 
-        /*
         println!(
-            "> Check called. Currently collected {} monotonicity lemmas and {} fn applications.",
-            self.all_collected_lemmas.len(),
+            "> Check called. There are {} collected fn applications.",
             self.count_fn_occurances()
         );
-        */
-        let mut remaining_lemmas = self.all_collected_lemmas.clone();
-        while !remaining_lemmas.is_empty() {
-            // Check for solution with current set of enforced monotonicity lemmas
-            let n_enforced_lemmas = self.all_collected_lemmas.len() - remaining_lemmas.len();
-            println!("Trying with {n_enforced_lemmas} enforced monotonicity lemmas..");
+
+        // TODO: If multiple solutions are to be iterated, this counting is incorrect since
+        //       we need to remember the number of enforced constraints in the state during
+        //       successive check() calls (second check does not start at 0)
+        // TODO: Similarly, we should double check what happens when using soft constraints
+        //       and running optimization - I guess whole optimization is done for each check
+        //       call? And only then we check the monotonicities?
+
+        let mut n_enforced_pairs = 0;
+        loop {
+            // Check for solution with the current set of enforced monotonicity row pairs
+            println!("> Checking with {n_enforced_pairs} enforced monotonicity row pairs..");
             let res = self.smt_solver.check(&[]);
 
-            // If unsat is returned, the whole thing is unsat
+            // If unsat is returned, the whole thing should be unsat
             if res != SatResult::Sat {
                 return res;
             }
-            //println!("Intermetiate solution found, trying monotonicities..");
 
-            // Go over all the non-enforced lemmas, check which are not satisfied in the model,
-            // and assert them for the next iteration.
-            let mut lemmas_to_enforce = HashSet::new();
-            for lemma in &remaining_lemmas {
-                // Check if it is satisfied in the current model
-                let current_model = self.get_model().unwrap();
-                // TODO: model_completion should be eval to true right?
-                let lemma_holds = current_model.eval(lemma, true).unwrap();
-                let lemma_holds = lemma_holds.as_bool().unwrap();
+            println!("> Intermetiate solution found, testing for monotonicity..");
+            let current_model = self.get_model().unwrap();
+            let mut n_new_enforced_pairs = 0;
 
-                // Mark lemmas to be enforced
-                if !lemma_holds {
-                    lemmas_to_enforce.insert(lemma.clone());
+            // For each uninterpreted function, go over its occurences, evaluate them,
+            // look for pairs that break monotonicity, and assert them for the next iteration.
+            for fn_apps in self.fun_occurences.values() {
+                // Evaluate the fn applications and collect table rows. Rows with output 0/1 are
+                // collected separately, since we only need to compare lines with different outputs.
+                let mut unique_table_rows_0 = HashSet::new();
+                let mut unique_table_rows_1 = HashSet::new();
+
+                for fn_app in fn_apps {
+                    let evaluated_args: Vec<bool> = fn_app
+                        .args
+                        .clone()
+                        .into_iter()
+                        .map(|arg| current_model.eval(&arg, true).unwrap().as_bool().unwrap())
+                        .collect();
+                    let fn_output: bool = current_model
+                        .eval(&fn_app.full_app, true)
+                        .unwrap()
+                        .as_bool()
+                        .unwrap();
+
+                    if fn_output {
+                        unique_table_rows_1.insert(evaluated_args);
+                    } else {
+                        unique_table_rows_0.insert(evaluated_args);
+                    }
+                }
+
+                // Get the function declaration from any fn_app (they're all the same function)
+                let func_decl = fn_apps.iter().next().unwrap().full_app.decl();
+                let fn_id = func_decl.name();
+
+                // Now check for pairs of rows that break monotonicity, that is rows that differ in
+                // one value (and result in different output) in the following way:
+                //     1) An activator input goes 0 -> 1 and output goes 1 -> 0
+                //     2) An inhibitor input goes 1 -> 0 and output goes 1 -> 0
+                // For pairs that break monotonicity, create the "f(row_1) => f(row_0)" asserts
+                for row_1 in &unique_table_rows_1 {
+                    for (i, value_1) in row_1.iter().enumerate() {
+                        // Check whether a corresponding row with a flipped value is in the other set
+                        // Only check for pairs that would violate monotonicity
+                        let monotonicity = self.get_monotonicity_def(&fn_id, i);
+
+                        if (!*value_1 && matches!(monotonicity, Some(Monotonicity::Positive)))
+                            || (*value_1 && matches!(monotonicity, Some(Monotonicity::Negative)))
+                        {
+                            let mut row_0 = row_1.clone();
+                            row_0[i] = !*value_1; // flip monotonic input
+                            if unique_table_rows_0.contains(&row_0) {
+                                // Assert the monotonicity constraint for the two rows
+                                let app1 = apply_fn_to_table_row(row_1, &func_decl);
+                                let app2 = apply_fn_to_table_row(&row_0, &func_decl);
+                                self.smt_solver.assert(&app1.implies(&app2));
+                                n_new_enforced_pairs += 1;
+                            }
+                        }
+                    }
                 }
             }
-            if lemmas_to_enforce.is_empty() {
+
+            // If there are no function with broken monotonicity, we have a SAT solution
+            n_enforced_pairs += n_new_enforced_pairs;
+            if n_new_enforced_pairs == 0 {
                 println!(
-                    "Found SAT solution after enforcing {n_enforced_lemmas} out of {}",
-                    self.all_collected_lemmas.len()
+                    "> Found a solution after enforcing {n_enforced_pairs} monotonicity row pairs.."
                 );
-                break;
-            }
-            for lemma in lemmas_to_enforce {
-                self.smt_solver.assert(&lemma);
-                //println!("{lemma}");
-                remaining_lemmas.remove(&lemma);
+                return SatResult::Sat;
             }
         }
-        SatResult::Sat
     }
 
     fn get_model(&self) -> Option<Model> {
