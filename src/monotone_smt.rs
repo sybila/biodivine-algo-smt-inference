@@ -308,11 +308,7 @@ impl InstantiationMonotoneSMTSolver {
             let mut fixed_table_rows_1 = HashSet::new();
 
             for fn_app in fn_apps {
-                let fn_output: bool = model
-                    .eval(fn_app, true)
-                    .unwrap()
-                    .as_bool()
-                    .unwrap();
+                let fn_output: bool = model.eval(fn_app, true).unwrap().as_bool().unwrap();
 
                 if fn_output {
                     let evaluated_args: Vec<bool> = fn_app
@@ -776,26 +772,52 @@ impl MonotoneSMTSolver for LazyInstantiationMonotoneSMTSolver {
                 let func_decl = fn_apps.iter().next().unwrap().full_app.decl();
                 let fn_id = func_decl.name();
 
-                // Check for row pairs breaking mono (one input and output flipped). Two cases:
-                //     1) An activator input goes 0 -> 1 and output goes 1 -> 0
-                //     2) An inhibitor input goes 1 -> 0 and output goes 1 -> 0
+                // Check for row pairs breaking monotonicity lemmas
                 for row_1 in &unique_table_rows_1 {
-                    for (i, value_1) in row_1.iter().enumerate() {
-                        // Check whether a corresponding row with a flipped value is in the other set
-                        // Only check for pairs that would actually violate monotonicity
-                        let monotonicity = self.get_monotonicity_def(&fn_id, i);
-                        if (!*value_1 && matches!(monotonicity, Some(Monotonicity::Positive)))
-                            || (*value_1 && matches!(monotonicity, Some(Monotonicity::Negative)))
-                        {
-                            let mut row_0 = row_1.clone();
-                            row_0[i] = !*value_1; // flip input required monotone
-                            if unique_table_rows_0.contains(&row_0) {
-                                // Assert the monotonicity constraint `f(row_1) => f(row_0)`
-                                let app1 = apply_fn_to_table_row(row_1, &func_decl);
-                                let app2 = apply_fn_to_table_row(&row_0, &func_decl);
-                                self.smt_solver.assert(&app1.implies(&app2));
-                                n_new_enforced_pairs += 1;
+                    for row_0 in &unique_table_rows_0 {
+                        // TODO: as version 2: use hashmaps, and assert full monotonicity lemma using 2 function applications
+                        // TODO: as version 3: use hashmaps, and assert full monotonicity lemma using all pairs of function applications
+
+                        // Check if the two rows satisfy monotonicity lemma assumptions, and if so,
+                        // assert f(row1) => f(row0)
+                        let mut assumptions_sat = true;
+                        for (i, (val_1, val_0)) in row_1.iter().zip(row_0.iter()).enumerate() {
+                            // If the two values are equal, it cant break any of the three assumption types
+                            if *val_1 != *val_0 {
+                                match self
+                                    .monotonicity_defs
+                                    .get(&fn_id)
+                                    .and_then(|defs| defs.get(&i))
+                                {
+                                    Some(Monotonicity::Positive) => {
+                                        // Assumption: val_1 => val_0
+                                        if *val_1 && !*val_0 {
+                                            assumptions_sat = false;
+                                            break;
+                                        }
+                                    }
+                                    Some(Monotonicity::Negative) => {
+                                        // Assumption: val_0 => val_1
+                                        if !*val_1 && *val_0 {
+                                            assumptions_sat = false;
+                                            break;
+                                        }
+                                    }
+                                    None => {
+                                        // Assumption: val_0 <=> val_1
+                                        assumptions_sat = false;
+                                        break;
+                                    }
+                                }
                             }
+                        }
+
+                        if assumptions_sat {
+                            // Assert the monotonicity constraint `f(row_1) => f(row_0)`
+                            let app1 = apply_fn_to_table_row(row_1, &func_decl);
+                            let app2 = apply_fn_to_table_row(row_0, &func_decl);
+                            self.smt_solver.assert(&app1.implies(&app2));
+                            n_new_enforced_pairs += 1;
                         }
                     }
                 }
