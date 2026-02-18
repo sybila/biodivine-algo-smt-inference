@@ -6,14 +6,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use z3::ast::{Ast, Bool};
 use z3::{FuncDecl, Model, Sort};
 
+pub mod smt_solver;
+
 /// A data structure which defines one state that is supposed to exist in a BN.
 mod smt_state;
 pub use smt_state::SmtState;
-
-mod monotone_smt;
-pub use monotone_smt::{
-    InstantiationMonotoneSMTSolver, MonotoneSMTSolver, QuantifiedMonotoneSMTSolver,
-};
 
 /// Utility methods for generating logical expressions for the SMT solver.
 mod expression_generators;
@@ -32,6 +29,10 @@ pub use naive_inference::{loosen_specification, run_naive_inference};
 
 /// Blocking clause strategies for iterating over multiple unique solutions.
 pub mod blocking;
+use crate::smt_solver::{
+    DynMonotoneOptimizeSolver, DynOptimizeSolver, InstantiatedMonotoneSolver,
+    QuantifiedMonotoneSolver,
+};
 pub use blocking::BlockingStrategy;
 
 /// A module for collectively storing non-trivial tests, because we will probably need
@@ -269,10 +270,14 @@ impl InferenceProblem {
     }
 
     /// Build a [`z3::Optimize`] solver instance that implements all prescribed constraints.
-    pub fn build_solver(&self, encoding: EncodingMode) -> Box<dyn MonotoneSMTSolver> {
-        let mut solver: Box<dyn MonotoneSMTSolver> = match encoding {
-            EncodingMode::Quantified => Box::new(QuantifiedMonotoneSMTSolver::new()),
-            EncodingMode::Instantiation => Box::new(InstantiationMonotoneSMTSolver::new()),
+    pub fn build_solver(&self, encoding: EncodingMode) -> DynOptimizeSolver {
+        let mut solver: DynMonotoneOptimizeSolver = match encoding {
+            EncodingMode::Quantified => {
+                Box::new(QuantifiedMonotoneSolver::new(z3::Optimize::new()))
+            }
+            EncodingMode::Instantiation => {
+                Box::new(InstantiatedMonotoneSolver::new(z3::Optimize::new()))
+            }
         };
 
         // let mut solver = QuantifiedMonotoneSMTSolver::new();

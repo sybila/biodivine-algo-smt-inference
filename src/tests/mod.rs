@@ -1,4 +1,5 @@
-use crate::{InferenceProblem, MonotoneSMTSolver};
+use crate::InferenceProblem;
+use crate::smt_solver::DynOptimizeSolver;
 
 /// Test that on fully specified networks, the inference process validates the
 /// expected properties and/or identifies the correct models for expected steady states.
@@ -13,7 +14,7 @@ mod inference_toy_models;
 /// Very simple tests for naive inference method using toy models.
 mod inference_naive;
 
-fn get_instatiation_solver(problem: &InferenceProblem) -> Box<dyn MonotoneSMTSolver> {
+fn get_instantiation_solver(problem: &InferenceProblem) -> DynOptimizeSolver {
     problem.build_solver(crate::EncodingMode::Instantiation)
 }
 
