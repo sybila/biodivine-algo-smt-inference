@@ -289,6 +289,78 @@ impl InstantiationMonotoneSMTSolver {
             }
         }
     }
+
+    fn get_monotonicity_def(
+        &self,
+        fn_id: &FuncDeclIdentifier,
+        idx: usize,
+    ) -> Option<&Monotonicity> {
+        self.monotonicity_defs
+            .get(fn_id)
+            .and_then(|defs| defs.get(&idx))
+    }
+
+    /// TODO: merge with the same in LazyInstantiationMonotoneSMTSolver
+    pub fn repair_monotonicity(&self, model: &Model) -> HashMap<FuncDeclIdentifier, String> {
+        let mut monotone_fn_expressions = HashMap::new();
+        for (fn_id, fn_apps) in &self.fun_occurences {
+            // Evaluate the fn applications and collect table rows with output 1 (to build 'dnf')
+            let mut fixed_table_rows_1 = HashSet::new();
+
+            for fn_app in fn_apps {
+                let fn_output: bool = model
+                    .eval(fn_app, true)
+                    .unwrap()
+                    .as_bool()
+                    .unwrap();
+
+                if fn_output {
+                    let evaluated_args: Vec<bool> = fn_app
+                        .children()
+                        .iter()
+                        .map(|ast| ast.as_bool().unwrap())
+                        .map(|arg| model.eval(&arg, true).unwrap().as_bool().unwrap())
+                        .collect();
+                    fixed_table_rows_1.insert(evaluated_args);
+                }
+            }
+
+            if fixed_table_rows_1.is_empty() {
+                monotone_fn_expressions.insert(fn_id.clone(), "false".to_string());
+                continue;
+            }
+
+            let dnf = DNF::from_positive_table_rows(&fixed_table_rows_1);
+            let arity = dnf.get_arity();
+
+            // Now go over the clauses and modify them make the function monotone
+            // Some clauses may have become the same, so we use HashSet
+            let mut unique_dnf_clauses: HashSet<DNFClause> = HashSet::new();
+            for clause in &dnf.clauses {
+                let mut modified_clause = clause.clone();
+                for (i, literal) in clause.literals.iter().enumerate() {
+                    let monotonicity = self.get_monotonicity_def(fn_id, i);
+
+                    // If activator is present as positive literal, or inhibitor as negative literal,
+                    // remove it from the clause
+                    if (matches!(monotonicity, Some(Monotonicity::Positive)) && literal.is_neg())
+                        || (matches!(monotonicity, Some(Monotonicity::Negative))
+                            && literal.is_pos())
+                    {
+                        modified_clause.literals[i] = LiteralValue::Missing;
+                    }
+                }
+                unique_dnf_clauses.insert(modified_clause);
+            }
+
+            let unique_clauses_dnf = DNF::new(unique_dnf_clauses);
+            let var_names: Vec<String> = (0..arity).map(|i| format!("x_{}", i)).collect();
+            let expression = unique_clauses_dnf.create_dnf_expression(&var_names);
+
+            monotone_fn_expressions.insert(fn_id.clone(), expression.to_string());
+        }
+        monotone_fn_expressions
+    }
 }
 
 impl MonotoneSMTSolver for InstantiationMonotoneSMTSolver {

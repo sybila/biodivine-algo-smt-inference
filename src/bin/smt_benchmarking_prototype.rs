@@ -1,6 +1,6 @@
 use biodivine_algo_smt_inference::{Dataset, Observation};
 use biodivine_algo_smt_inference::{
-    EncodingMode, LazyInstantiationMonotoneSMTSolver, substitute_fn_args,
+    EncodingMode, InstantiationMonotoneSMTSolver, substitute_fn_args,
 };
 use biodivine_lib_param_bn::{BooleanNetwork, FnUpdate, ModelAnnotation};
 use clap::Parser;
@@ -95,16 +95,16 @@ fn main() {
         // and output the extracted BN
         // For the two instantiation-based solvers, we must repair monotonicity in the model
         // TODO: add monotonicity repair to instantiation solver as well
-        let bn_instance = if args.solver == "lazy"
-            && let Some(lazy_solver) = solver
+        let bn_instance = if args.solver == "instantiation"
+            && let Some(inst_solver) = solver
                 .as_any()
-                .downcast_ref::<LazyInstantiationMonotoneSMTSolver>()
+                .downcast_ref::<InstantiationMonotoneSMTSolver>()
         {
             if args.verbose {
                 println!("Repairing monotonicity...");
             }
 
-            let monotone_fn_map = lazy_solver.repair_monotonicity(&model);
+            let monotone_fn_map = inst_solver.repair_monotonicity(&model);
 
             let psbn = inference.get_network();
             let mut bn_instance = psbn.clone();
