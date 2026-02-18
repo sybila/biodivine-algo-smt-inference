@@ -1,5 +1,4 @@
 use crate::expression_generators::fn_update_to_smt;
-use crate::monotone_smt::LazyInstantiationMonotoneSMTSolver;
 use biodivine_lib_bdd::{Bdd, BddVariableSet, ValuationsOfClauseIterator};
 use biodivine_lib_param_bn::Monotonicity::Activation;
 use biodivine_lib_param_bn::{BooleanNetwork, FnUpdate, ParameterId, VariableId};
@@ -13,7 +12,8 @@ pub use smt_state::SmtState;
 
 mod monotone_smt;
 pub use monotone_smt::{
-    InstantiationMonotoneSMTSolver, MonotoneSMTSolver, QuantifiedMonotoneSMTSolver,
+    InstantiationMonotoneSMTSolver, LazyInstantiationMonotoneSMTSolver, MonotoneSMTSolver,
+    QuantifiedMonotoneSMTSolver,
 };
 
 /// Utility methods for generating logical expressions for the SMT solver.
@@ -34,6 +34,10 @@ pub use naive_inference::{loosen_specification, run_naive_inference};
 /// Blocking clause strategies for iterating over multiple unique solutions.
 pub mod blocking;
 pub use blocking::BlockingStrategy;
+
+/// Data structures for simplified DNF clause representation and DNF generating.
+mod dnf;
+pub use dnf::{DNF, DNFClause, LiteralValue};
 
 /// A module for collectively storing non-trivial tests, because we will probably need
 /// quite a few of them (simpler unit tests can still go into the modules of the tested code)
@@ -226,20 +230,11 @@ impl InferenceProblem {
             let update_fn = psbn.get_update_function(variable).clone().unwrap();
             if let FnUpdate::Param(param_id, args) = update_fn {
                 let (bdd_ctx, fn_bdd) = self.extract_uninterpreted_symbol(model, param_id);
-                let mut bdd_string = fn_bdd.to_boolean_expression(&bdd_ctx).to_string();
-                let mut renaming = BTreeMap::new();
-                for (i, arg) in args.iter().enumerate() {
-                    assert!(matches!(arg, FnUpdate::Var(_)));
-                    renaming.insert(format!("x_{}", i), format!("({})", arg.to_string(psbn)));
-                }
+                let bdd_string = fn_bdd.to_boolean_expression(&bdd_ctx).to_string();
 
-                let mut keys: Vec<_> = renaming.keys().cloned().collect();
-                keys.sort_by_key(|k| std::cmp::Reverse(k.len()));
-                for key in keys {
-                    bdd_string = bdd_string.replace(&key, &renaming[&key]);
-                }
-
-                let update = FnUpdate::try_from_str(&bdd_string, &bn_instance).unwrap();
+                // We need to substitute variable names in the BDD expression string (x_0, x_1,..)
+                // with the actual function arguments
+                let update = substitute_fn_args(&bdd_string, args, psbn);
                 bn_instance
                     .set_update_function(variable, Some(update))
                     .unwrap();
@@ -436,4 +431,32 @@ impl InferenceProblem {
 
         Ok(collected_models)
     }
+}
+
+/// Given a general expression of a previously unintepreted function, substitute all formal
+/// args (x_0, x_1, ..) with the actual arguments that the function is applied to (in the
+/// BN's update).
+///
+/// Return a new FnUpdate instance for the expression, with substituted variable names.
+pub fn substitute_fn_args(
+    expression: &str,
+    applied_args: Vec<FnUpdate>,
+    psbn: &BooleanNetwork,
+) -> FnUpdate {
+    // Compute rename mapping between formal and actual arguments
+    let mut renaming = BTreeMap::new();
+    for (i, arg) in applied_args.iter().enumerate() {
+        assert!(matches!(arg, FnUpdate::Var(_)));
+        renaming.insert(format!("x_{}", i), format!("({})", arg.to_string(psbn)));
+    }
+
+    // Sort by len, since this is just string pattern matching substitution
+    let mut keys: Vec<_> = renaming.keys().cloned().collect();
+    keys.sort_by_key(|k| std::cmp::Reverse(k.len()));
+    let mut modified_expression = expression.to_string();
+    for key in keys {
+        modified_expression = modified_expression.replace(&key, &renaming[&key]);
+    }
+
+    FnUpdate::try_from_str(&modified_expression, psbn).unwrap()
 }
