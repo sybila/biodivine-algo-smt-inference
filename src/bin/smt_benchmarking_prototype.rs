@@ -1,8 +1,5 @@
 use biodivine_algo_smt_inference::{Dataset, Observation};
-use biodivine_algo_smt_inference::{
-    EncodingMode, InstantiationMonotoneSMTSolver, LazyInstantiationMonotoneSMTSolver,
-    substitute_fn_args,
-};
+use biodivine_algo_smt_inference::{EncodingMode, substitute_fn_args};
 use biodivine_lib_param_bn::{BooleanNetwork, FnUpdate, ModelAnnotation};
 use clap::Parser;
 use clap::builder::PossibleValuesParser;
@@ -93,13 +90,11 @@ fn main() {
         // println!("{:?}", model);
 
         // Reconstruct the BN instance using the functions extracted from the z3 model
-        // and output the extracted BN
-        // For the two instantiation-based solvers, we must repair monotonicity in the model
-        // TODO: do this via trait or something
-        let bn_instance = if args.solver == "instantiation"
-            && let Some(inst_solver) = solver
-                .as_any()
-                .downcast_ref::<InstantiationMonotoneSMTSolver>()
+        // and output the extracted BN.
+
+        // For the two instantiation-based solvers, we must repair monotonicity in the model.
+        let bn_instance = if (args.solver == "instantiation" || args.solver == "lazy")
+            && let Some(inst_solver) = solver.as_instantiation_solver()
         {
             if args.verbose {
                 println!("Repairing monotonicity...");
@@ -127,38 +122,8 @@ fn main() {
                 }
             }
             bn_instance
-        } else if args.solver == "lazy"
-            && let Some(lazy_solver) = solver
-                .as_any()
-                .downcast_ref::<LazyInstantiationMonotoneSMTSolver>()
-        {
-            if args.verbose {
-                println!("Repairing monotonicity...");
-            }
-
-            let monotone_fn_map = lazy_solver.repair_monotonicity(&model);
-
-            let psbn = inference.get_network();
-            let mut bn_instance = psbn.clone();
-            for variable in psbn.variables() {
-                let var_name = psbn.get_variable_name(variable);
-                let update_fn = psbn.get_update_function(variable).clone().unwrap();
-                if let FnUpdate::Param(_, fn_args) = update_fn {
-                    let uninterpreted_fn_id = format!("f_{var_name}"); // id in SMT encoding
-                    let fn_dnf_str = monotone_fn_map.get(&uninterpreted_fn_id).unwrap();
-
-                    // We need to substitute variable names in the fn expression string (x_0, x_1,..)
-                    // with the actual function arguments
-                    let update = substitute_fn_args(fn_dnf_str, fn_args, psbn);
-                    bn_instance
-                        .set_update_function(variable, Some(update))
-                        .unwrap();
-                } else {
-                    panic!("Unexpected update fn format.");
-                }
-            }
-            bn_instance
         } else {
+            // Return the model directly since its already monotone
             inference.extract_bn_instance_simplified(&model)
         };
         if args.verbose {

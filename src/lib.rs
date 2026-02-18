@@ -12,7 +12,7 @@ pub use smt_state::SmtState;
 
 mod monotone_smt;
 pub use monotone_smt::{
-    InstantiationMonotoneSMTSolver, LazyInstantiationMonotoneSMTSolver, MonotoneSMTSolver,
+    FullInstantiationMonotoneSMTSolver, LazyInstantiationMonotoneSMTSolver, MonotoneSMTSolver,
     QuantifiedMonotoneSMTSolver,
 };
 
@@ -269,7 +269,7 @@ impl InferenceProblem {
     pub fn build_solver(&self, encoding: EncodingMode) -> Box<dyn MonotoneSMTSolver> {
         let mut solver: Box<dyn MonotoneSMTSolver> = match encoding {
             EncodingMode::Quantified => Box::new(QuantifiedMonotoneSMTSolver::new()),
-            EncodingMode::Instantiation => Box::new(InstantiationMonotoneSMTSolver::new()),
+            EncodingMode::Instantiation => Box::new(FullInstantiationMonotoneSMTSolver::new()),
             EncodingMode::LazyInstantiation => Box::new(LazyInstantiationMonotoneSMTSolver::new()),
         };
 

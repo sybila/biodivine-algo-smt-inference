@@ -1,19 +1,19 @@
 use num_rational::BigRational;
-use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use z3::ast::{Ast, Bool, Dynamic, forall_const};
 use z3::{DeclKind, FuncDecl, Model, SatResult};
 
 use crate::{DNF, DNFClause, LiteralValue};
 
+#[derive(Debug, PartialEq, Eq, Clone)]
 /// Represents whether a function input is positively or negatively monotone
-enum Monotonicity {
+pub enum Monotonicity {
     Positive,
     Negative,
 }
 
 /// Interface for SMT solvers that handle monotonicity constraints on uninterpreted functions
-pub trait MonotoneSMTSolver: Any {
+pub trait MonotoneSMTSolver {
     /// Set input on index i for fn f as positively monotone.
     fn set_monotone(&mut self, f: &FuncDecl, i: usize);
 
@@ -39,9 +39,105 @@ pub trait MonotoneSMTSolver: Any {
     /// by the optimizer.
     fn register_model_handler(&self, callback: Box<dyn Fn(&Model)>);
 
-    fn as_any(&self) -> &dyn Any;
-
     fn set_verbose(&mut self);
+
+    /// Downcast into InstantiationMonotoneSMTSolver if the solver implements
+    /// the sub-trait as well.
+    fn as_instantiation_solver(&self) -> Option<&dyn InstantiationMonotoneSMTSolver> {
+        None
+    }
+}
+
+pub trait InstantiationMonotoneSMTSolver: MonotoneSMTSolver {
+    /// Getter for all collected monotonicities.
+    fn get_all_monotonicity_defs(
+        &self,
+    ) -> &HashMap<FuncDeclIdentifier, HashMap<usize, Monotonicity>>;
+
+    /// Get monotonicity of a particular function wrt. to its arg on given index.
+    fn get_monotonicity_def(&self, fn_id: &FuncDeclIdentifier, idx: usize) -> Option<Monotonicity> {
+        self.get_all_monotonicity_defs()
+            .get(fn_id)
+            .and_then(|defs| defs.get(&idx).cloned())
+    }
+
+    /// Getter for collected function occurances in all asserted formulas.
+    fn get_collected_fn_occurences(&self) -> &HashMap<FuncDeclIdentifier, HashSet<FunctionApp>>;
+
+    /// Make the intepretations of functions extracted from the model fully satisfy all
+    /// monotonicity constraints.
+    ///
+    /// For now, this just returns a mapping "fn_id" -> "dnf string expression". The args in
+    /// the dnf expressions are simply named x_0, x_1, ... (must be renamed before used in a BN).
+    ///
+    /// TODO: There are lots inefficiencies in this prototype, gotta refactor it once it is working.
+    fn repair_monotonicity(&self, model: &Model) -> HashMap<FuncDeclIdentifier, String> {
+        let mut monotone_fn_expressions = HashMap::new();
+        for (fn_id, fn_apps) in self.get_collected_fn_occurences() {
+            // Evaluate the fn applications and collect table rows with output 1 (to build 'dnf')
+            let mut fixed_table_rows_1 = HashSet::new();
+
+            for fn_app in fn_apps {
+                let fn_output = model
+                    .eval(&fn_app.full_app, true)
+                    .unwrap()
+                    .as_bool()
+                    .unwrap();
+                if fn_output {
+                    let evaluated_args: Vec<bool> = fn_app
+                        .args
+                        .iter()
+                        .map(|arg| model.eval(arg, true).unwrap().as_bool().unwrap())
+                        .collect();
+                    fixed_table_rows_1.insert(evaluated_args);
+                }
+            }
+
+            if fixed_table_rows_1.is_empty() {
+                monotone_fn_expressions.insert(fn_id.clone(), "false".to_string());
+                continue;
+            }
+
+            let dnf = DNF::from_positive_table_rows(&fixed_table_rows_1);
+            let arity = dnf.get_arity();
+
+            // Now go over the clauses and modify them make the function monotone
+            // Some clauses may have become the same, so we use HashSet
+            let mut unique_dnf_clauses: HashSet<DNFClause> = HashSet::new();
+            for clause in &dnf.clauses {
+                let mut modified_clause = clause.clone();
+                for (i, literal) in clause.literals.iter().enumerate() {
+                    let monotonicity = self.get_monotonicity_def(fn_id, i);
+
+                    // If activator is present as positive literal, or inhibitor as negative literal,
+                    // remove it from the clause
+                    if (matches!(monotonicity, Some(Monotonicity::Positive)) && literal.is_neg())
+                        || (matches!(monotonicity, Some(Monotonicity::Negative))
+                            && literal.is_pos())
+                    {
+                        modified_clause.literals[i] = LiteralValue::Missing;
+                    }
+                }
+                unique_dnf_clauses.insert(modified_clause);
+            }
+
+            let unique_clauses_dnf = DNF::new(unique_dnf_clauses);
+            let var_names: Vec<String> = (0..arity).map(|i| format!("x_{}", i)).collect();
+            let expression = unique_clauses_dnf.create_dnf_expression(&var_names);
+
+            monotone_fn_expressions.insert(fn_id.clone(), expression.to_string());
+        }
+        monotone_fn_expressions
+    }
+
+    /// Count current collected function applications (summed over all uninterpreted
+    /// functions).
+    fn count_fn_occurances(&self) -> usize {
+        self.get_collected_fn_occurences()
+            .values()
+            .map(|apps| apps.len())
+            .sum()
+    }
 }
 
 /// SMT solver that uses quantified (forall) constraints to encode monotonicity properties
@@ -129,10 +225,6 @@ impl MonotoneSMTSolver for QuantifiedMonotoneSMTSolver {
         self.smt_solver.register_model_handler(callback);
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn set_verbose(&mut self) {
         self.verbose = true;
     }
@@ -149,15 +241,15 @@ type FuncDeclIdentifier = String;
 /// SMT solver using instantiated monotonicity lemmas. Instead of universal quantification,
 /// it creates specific implications between function applications that differ only in inputs
 /// where monotonicity is defined. Lemmas are added as constraints are asserted.
-pub struct InstantiationMonotoneSMTSolver {
+pub struct FullInstantiationMonotoneSMTSolver {
     smt_solver: z3::Optimize,
 
     /// Map with required monotonicities in form of `{function_id: {input_index: monotonicity}}`.
     monotonicity_defs: HashMap<FuncDeclIdentifier, HashMap<usize, Monotonicity>>,
 
-    /// Collection of occurances of each uninterpreted functions (across fixed point constraints
+    /// Collection of occurances of each uninterpreted functions (across encountered fixed point
     /// or essentiality constraints). These are used to build instantiated monotonicity lemmas.
-    fun_occurences: HashMap<FuncDeclIdentifier, HashSet<Bool>>,
+    fun_occurences: HashMap<FuncDeclIdentifier, HashSet<FunctionApp>>,
 
     /// Helper flag whether assert was already used, since all monotonicity constraints have
     /// to be declared before all assertions. Monotonicity lemmas are added as part of [Self::assert].
@@ -169,11 +261,43 @@ pub struct InstantiationMonotoneSMTSolver {
     verbose: bool,
 }
 
+/// Function application representation that allows accessing the arguments easily,
+/// without needing to process the AST.
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub struct FunctionApp {
+    id: FuncDeclIdentifier,
+    full_app: Bool,
+    args: Vec<Bool>,
+}
+
+impl FunctionApp {
+    pub fn new(id: FuncDeclIdentifier, full_app: Bool) -> Self {
+        let args = get_fn_app_args(&full_app);
+        FunctionApp { id, full_app, args }
+    }
+}
+
+/// Extracts all uninterpreted function arguments into a vector (so that they
+/// can be easily evaluated).
+fn get_fn_app_args(app: &Bool) -> Vec<Bool> {
+    match app.decl().kind() {
+        DeclKind::UNINTERPRETED => app
+            .children()
+            .iter()
+            .map(|child: &Dynamic| child.as_bool().unwrap())
+            .collect(),
+        _ => panic!("{} is not function application", app),
+    }
+}
+
 /// Extracts all uninterpreted function applications from a boolean formula.
 /// Uninterpreted functions are the ones where we might enforce monotonicity.
-fn get_function_applications(fml: &Bool) -> HashSet<Bool> {
+///
+/// TODO: for now only works if functions are not nested (arguments do not contain
+///       other function applications).
+fn get_function_applications(fml: &Bool) -> HashSet<FunctionApp> {
     let mut todo = vec![fml.clone()];
-    let mut res: HashSet<Bool> = HashSet::new();
+    let mut res: HashSet<FunctionApp> = HashSet::new();
     let mut seen: HashSet<Bool> = HashSet::new();
 
     // Traverse formula tree, collecting uninterpreted function applications
@@ -185,7 +309,8 @@ fn get_function_applications(fml: &Bool) -> HashSet<Bool> {
         match cur.decl().kind() {
             DeclKind::UNINTERPRETED => {
                 if cur.num_children() > 0 {
-                    res.insert(cur.clone());
+                    let fn_app = FunctionApp::new(cur.decl().name(), cur);
+                    res.insert(fn_app);
                 }
             }
             DeclKind::TRUE | DeclKind::FALSE => {}
@@ -252,7 +377,7 @@ fn create_monotonicity_lemma(
     }
 }
 
-impl InstantiationMonotoneSMTSolver {
+impl FullInstantiationMonotoneSMTSolver {
     pub fn new() -> Self {
         let solver = z3::Optimize::new();
         // let mut params = Params::new();
@@ -263,7 +388,7 @@ impl InstantiationMonotoneSMTSolver {
         // set_global_param("verbose", "100");
         // solver.set_params(&params);
 
-        InstantiationMonotoneSMTSolver {
+        FullInstantiationMonotoneSMTSolver {
             smt_solver: solver,
             monotonicity_defs: HashMap::new(),
             fun_occurences: HashMap::new(),
@@ -279,86 +404,23 @@ impl InstantiationMonotoneSMTSolver {
         assert!(app.is_app());
         let decl = app.decl();
         for other in self.fun_occurences.get(&decl.name()).unwrap() {
-            if let Some(lemma) = create_monotonicity_lemma(app, other, &self.monotonicity_defs) {
+            if let Some(lemma) =
+                create_monotonicity_lemma(app, &other.full_app, &self.monotonicity_defs)
+            {
                 self.smt_solver.assert(&lemma);
                 self.num_lemmas += 1;
             }
-            if let Some(lemma) = create_monotonicity_lemma(other, app, &self.monotonicity_defs) {
+            if let Some(lemma) =
+                create_monotonicity_lemma(&other.full_app, app, &self.monotonicity_defs)
+            {
                 self.smt_solver.assert(&lemma);
                 self.num_lemmas += 1;
             }
         }
-    }
-
-    fn get_monotonicity_def(
-        &self,
-        fn_id: &FuncDeclIdentifier,
-        idx: usize,
-    ) -> Option<&Monotonicity> {
-        self.monotonicity_defs
-            .get(fn_id)
-            .and_then(|defs| defs.get(&idx))
-    }
-
-    /// TODO: merge with the same in LazyInstantiationMonotoneSMTSolver
-    pub fn repair_monotonicity(&self, model: &Model) -> HashMap<FuncDeclIdentifier, String> {
-        let mut monotone_fn_expressions = HashMap::new();
-        for (fn_id, fn_apps) in &self.fun_occurences {
-            // Evaluate the fn applications and collect table rows with output 1 (to build 'dnf')
-            let mut fixed_table_rows_1 = HashSet::new();
-
-            for fn_app in fn_apps {
-                let fn_output = model.eval(fn_app, true).unwrap().as_bool().unwrap();
-                if fn_output {
-                    let evaluated_args: Vec<bool> = fn_app
-                        .children()
-                        .iter()
-                        .map(|ast| ast.as_bool().unwrap())
-                        .map(|arg| model.eval(&arg, true).unwrap().as_bool().unwrap())
-                        .collect();
-                    fixed_table_rows_1.insert(evaluated_args);
-                }
-            }
-
-            if fixed_table_rows_1.is_empty() {
-                monotone_fn_expressions.insert(fn_id.clone(), "false".to_string());
-                continue;
-            }
-
-            let dnf = DNF::from_positive_table_rows(&fixed_table_rows_1);
-            let arity = dnf.get_arity();
-
-            // Now go over the clauses and modify them make the function monotone
-            // Some clauses may have become the same, so we use HashSet
-            let mut unique_dnf_clauses: HashSet<DNFClause> = HashSet::new();
-            for clause in &dnf.clauses {
-                let mut modified_clause = clause.clone();
-                for (i, literal) in clause.literals.iter().enumerate() {
-                    let monotonicity = self.get_monotonicity_def(fn_id, i);
-
-                    // If activator is present as positive literal, or inhibitor as negative literal,
-                    // remove it from the clause
-                    if (matches!(monotonicity, Some(Monotonicity::Positive)) && literal.is_neg())
-                        || (matches!(monotonicity, Some(Monotonicity::Negative))
-                            && literal.is_pos())
-                    {
-                        modified_clause.literals[i] = LiteralValue::Missing;
-                    }
-                }
-                unique_dnf_clauses.insert(modified_clause);
-            }
-
-            let unique_clauses_dnf = DNF::new(unique_dnf_clauses);
-            let var_names: Vec<String> = (0..arity).map(|i| format!("x_{}", i)).collect();
-            let expression = unique_clauses_dnf.create_dnf_expression(&var_names);
-
-            monotone_fn_expressions.insert(fn_id.clone(), expression.to_string());
-        }
-        monotone_fn_expressions
     }
 }
 
-impl MonotoneSMTSolver for InstantiationMonotoneSMTSolver {
+impl MonotoneSMTSolver for FullInstantiationMonotoneSMTSolver {
     fn set_monotone(&mut self, f: &FuncDecl, i: usize) {
         if self.has_asserted {
             panic!("Monotonicity constraints have to be declared before all assertions.")
@@ -390,6 +452,7 @@ impl MonotoneSMTSolver for InstantiationMonotoneSMTSolver {
         self.smt_solver.assert_soft(formula, weight, None);
     }
 
+    // TODO: merge internals into trait (parametrized method with `make_lemmas` flag)
     fn assert(&mut self, formula: &Bool) {
         self.has_asserted = true;
         self.smt_solver.assert(formula);
@@ -398,7 +461,7 @@ impl MonotoneSMTSolver for InstantiationMonotoneSMTSolver {
         // function occurences already collected, and add all monotonicity lemmas
         let function_applications = get_function_applications(formula);
         for app in function_applications {
-            let name = app.decl().name();
+            let name = app.id.clone();
             if !self.monotonicity_defs.contains_key(&name) {
                 continue;
             }
@@ -406,7 +469,7 @@ impl MonotoneSMTSolver for InstantiationMonotoneSMTSolver {
             let entry = self.fun_occurences.entry(name).or_default();
             if !(*entry).contains(&app) {
                 (*entry).insert(app.clone());
-                self.add_monotonicity_lemmas(&app);
+                self.add_monotonicity_lemmas(&app.full_app);
             }
         }
     }
@@ -434,96 +497,32 @@ impl MonotoneSMTSolver for InstantiationMonotoneSMTSolver {
         self.smt_solver.register_model_handler(callback);
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn set_verbose(&mut self) {
         self.verbose = true;
     }
+
+    /// Downcast into InstantiationMonotoneSMTSolver.
+    fn as_instantiation_solver(&self) -> Option<&dyn InstantiationMonotoneSMTSolver> {
+        Some(self)
+    }
 }
 
-impl Default for InstantiationMonotoneSMTSolver {
+impl Default for FullInstantiationMonotoneSMTSolver {
     fn default() -> Self {
         Self::new()
     }
 }
 
-/// Function application representation that allows accessing the arguments easily,
-/// without needing to process the AST.
-///
-/// TODO: this may not be needed in the end?
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub struct FunctionApp {
-    id: FuncDeclIdentifier,
-    full_app: Bool,
-    args: Vec<Bool>,
-}
-
-impl FunctionApp {
-    pub fn new(id: FuncDeclIdentifier, full_app: Bool) -> Self {
-        let args = get_fn_app_args(&full_app);
-        FunctionApp { id, full_app, args }
-    }
-}
-
-/// Extracts all uninterpreted function arguments into a vector (so that they
-/// can be easily evaluated).
-fn get_fn_app_args(app: &Bool) -> Vec<Bool> {
-    match app.decl().kind() {
-        DeclKind::UNINTERPRETED => app
-            .children()
-            .iter()
-            .map(|child: &Dynamic| child.as_bool().unwrap())
-            .collect(),
-        _ => panic!("{} is not function application", app),
-    }
-}
-
-/// Extracts all uninterpreted function applications from a boolean formula.
-/// Uninterpreted functions are the ones where we might enforce monotonicity.
-///
-/// TODO: merge with similar [get_function_applications]
-/// TODO: for now only works if functions are not nested (arguments do not contain
-///       other function applications).
-fn get_fn_apps_with_args(fml: &Bool) -> HashSet<FunctionApp> {
-    let mut todo = vec![fml.clone()];
-    let mut res: HashSet<FunctionApp> = HashSet::new();
-    let mut seen: HashSet<Bool> = HashSet::new();
-
-    // Traverse formula tree, collecting uninterpreted function applications
-    while let Some(cur) = todo.pop() {
-        if !cur.is_app() {
-            continue;
-        }
-
-        match cur.decl().kind() {
-            DeclKind::UNINTERPRETED => {
-                if cur.num_children() > 0 {
-                    let fn_app = FunctionApp::new(cur.decl().name(), cur);
-                    res.insert(fn_app);
-                }
-            }
-            DeclKind::TRUE | DeclKind::FALSE => {}
-            DeclKind::EQ
-            | DeclKind::AND
-            | DeclKind::OR
-            | DeclKind::NOT
-            | DeclKind::IFF
-            | DeclKind::IMPLIES => {
-                for child in cur.children() {
-                    let bool_child = child.as_bool().unwrap();
-                    if !seen.contains(&bool_child) {
-                        seen.insert(bool_child.clone());
-                        todo.push(bool_child);
-                    }
-                }
-            }
-            _ => panic!("Unsupported {}", cur),
-        }
+impl InstantiationMonotoneSMTSolver for FullInstantiationMonotoneSMTSolver {
+    fn get_all_monotonicity_defs(
+        &self,
+    ) -> &HashMap<FuncDeclIdentifier, HashMap<usize, Monotonicity>> {
+        &self.monotonicity_defs
     }
 
-    res
+    fn get_collected_fn_occurences(&self) -> &HashMap<FuncDeclIdentifier, HashSet<FunctionApp>> {
+        &self.fun_occurences
+    }
 }
 
 #[allow(dead_code)]
@@ -566,89 +565,6 @@ impl LazyInstantiationMonotoneSMTSolver {
             verbose: false,
         }
     }
-
-    fn get_monotonicity_def(
-        &self,
-        fn_id: &FuncDeclIdentifier,
-        idx: usize,
-    ) -> Option<&Monotonicity> {
-        self.monotonicity_defs
-            .get(fn_id)
-            .and_then(|defs| defs.get(&idx))
-    }
-
-    #[allow(dead_code)]
-    /// Count current collected function applications.
-    fn count_fn_occurances(&self) -> usize {
-        self.fun_occurences.values().map(|apps| apps.len()).sum()
-    }
-
-    /// Make the intepretations of functions extracted from the model fully satisfy all
-    /// monotonicity constraints.
-    ///
-    /// For now, this just returns a mapping "fn_id" -> "dnf string expression". The args in
-    /// the dnf expressions are simply named x_0, x_1, ... (must be renamed before used in a BN).
-    ///
-    /// TODO: There are lots inefficiencies in this prototype, gotta refactor it once it is working.
-    pub fn repair_monotonicity(&self, model: &Model) -> HashMap<FuncDeclIdentifier, String> {
-        let mut monotone_fn_expressions = HashMap::new();
-        for (fn_id, fn_apps) in &self.fun_occurences {
-            // Evaluate the fn applications and collect table rows with output 1 (to build 'dnf')
-            let mut fixed_table_rows_1 = HashSet::new();
-
-            for fn_app in fn_apps {
-                let fn_output: bool = model
-                    .eval(&fn_app.full_app, true)
-                    .unwrap()
-                    .as_bool()
-                    .unwrap();
-
-                if fn_output {
-                    let evaluated_args: Vec<bool> = fn_app
-                        .args
-                        .iter()
-                        .map(|arg| model.eval(arg, true).unwrap().as_bool().unwrap())
-                        .collect();
-                    fixed_table_rows_1.insert(evaluated_args);
-                }
-            }
-
-            if fixed_table_rows_1.is_empty() {
-                monotone_fn_expressions.insert(fn_id.clone(), "false".to_string());
-                continue;
-            }
-
-            let dnf = DNF::from_positive_table_rows(&fixed_table_rows_1);
-            let arity = dnf.get_arity();
-
-            // Now go over the clauses and modify them make the function monotone
-            // Some clauses may have become the same, so we use HashSet
-            let mut unique_dnf_clauses: HashSet<DNFClause> = HashSet::new();
-            for clause in &dnf.clauses {
-                let mut modified_clause = clause.clone();
-                for (i, literal) in clause.literals.iter().enumerate() {
-                    let monotonicity = self.get_monotonicity_def(fn_id, i);
-
-                    // If activator is present as positive literal, or inhibitor as negative literal,
-                    // remove it from the clause
-                    if (matches!(monotonicity, Some(Monotonicity::Positive)) && literal.is_neg())
-                        || (matches!(monotonicity, Some(Monotonicity::Negative))
-                            && literal.is_pos())
-                    {
-                        modified_clause.literals[i] = LiteralValue::Missing;
-                    }
-                }
-                unique_dnf_clauses.insert(modified_clause);
-            }
-
-            let unique_clauses_dnf = DNF::new(unique_dnf_clauses);
-            let var_names: Vec<String> = (0..arity).map(|i| format!("x_{}", i)).collect();
-            let expression = unique_clauses_dnf.create_dnf_expression(&var_names);
-
-            monotone_fn_expressions.insert(fn_id.clone(), expression.to_string());
-        }
-        monotone_fn_expressions
-    }
 }
 
 impl MonotoneSMTSolver for LazyInstantiationMonotoneSMTSolver {
@@ -687,11 +603,12 @@ impl MonotoneSMTSolver for LazyInstantiationMonotoneSMTSolver {
         self.smt_solver.assert_soft(formula, weight, None);
     }
 
+    // TODO: Merge/decouple
     fn assert(&mut self, formula: &Bool) {
         self.has_asserted = true;
         self.smt_solver.assert(formula);
 
-        let function_applications = get_fn_apps_with_args(formula);
+        let function_applications = get_function_applications(formula);
         for app in function_applications {
             let name = app.id.clone();
             if !self.monotonicity_defs.contains_key(&name) {
@@ -709,7 +626,8 @@ impl MonotoneSMTSolver for LazyInstantiationMonotoneSMTSolver {
     /// Monotonicity constraints are lazily added only for function table rows where
     /// the previous solution violates it.
     ///
-    /// TODO: There are lots inefficiencies in this prototype, gotta refactor it once it is working.
+    /// TODO: There are lots inefficiencies in this prototype, gotta refactor it once it
+    /// is working.
     fn check(&self) -> SatResult {
         if self.verbose {
             println!(
@@ -858,17 +776,30 @@ impl MonotoneSMTSolver for LazyInstantiationMonotoneSMTSolver {
         self.smt_solver.register_model_handler(callback);
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn set_verbose(&mut self) {
         self.verbose = true;
+    }
+
+    /// Downcast into InstantiationMonotoneSMTSolver.
+    fn as_instantiation_solver(&self) -> Option<&dyn InstantiationMonotoneSMTSolver> {
+        Some(self)
     }
 }
 
 impl Default for LazyInstantiationMonotoneSMTSolver {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl InstantiationMonotoneSMTSolver for LazyInstantiationMonotoneSMTSolver {
+    fn get_all_monotonicity_defs(
+        &self,
+    ) -> &HashMap<FuncDeclIdentifier, HashMap<usize, Monotonicity>> {
+        &self.monotonicity_defs
+    }
+
+    fn get_collected_fn_occurences(&self) -> &HashMap<FuncDeclIdentifier, HashSet<FunctionApp>> {
+        &self.fun_occurences
     }
 }
