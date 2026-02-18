@@ -547,7 +547,7 @@ impl LazyInstantiationMonotoneSMTSolver {
 
             if fixed_table_rows_1.is_empty() {
                 monotone_fn_expressions.insert(fn_id.clone(), "false".to_string());
-                break;
+                continue;
             }
 
             let dnf = DNF::from_positive_table_rows(&fixed_table_rows_1);
