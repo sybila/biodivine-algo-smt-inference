@@ -308,8 +308,7 @@ impl InstantiationMonotoneSMTSolver {
             let mut fixed_table_rows_1 = HashSet::new();
 
             for fn_app in fn_apps {
-                let fn_output: bool = model.eval(fn_app, true).unwrap().as_bool().unwrap();
-
+                let fn_output = model.eval(fn_app, true).unwrap().as_bool().unwrap();
                 if fn_output {
                     let evaluated_args: Vec<bool> = fn_app
                         .children()
@@ -527,6 +526,7 @@ fn get_fn_apps_with_args(fml: &Bool) -> HashSet<FunctionApp> {
     res
 }
 
+#[allow(dead_code)]
 /// Wrapper to transform bool vector to z3 compatible structure and apply
 /// function to these arguments.
 pub fn apply_fn_to_table_row(table_row: &[bool], func_decl: &FuncDecl) -> Bool {
@@ -725,10 +725,10 @@ impl MonotoneSMTSolver for LazyInstantiationMonotoneSMTSolver {
         //       and running optimization - I guess whole optimization is done for each check
         //       call? And only then we check the monotonicities?
 
-        let mut n_enforced_pairs = 0;
+        let mut n_enforced_lemmas = 0;
         loop {
             if self.verbose {
-                println!("> Checking with {n_enforced_pairs} enforced monotonicity row pairs..");
+                println!("> Checking with {n_enforced_lemmas} enforced monotonicity lemmas..");
             }
             let res = self.smt_solver.check(&[]);
 
@@ -740,14 +740,14 @@ impl MonotoneSMTSolver for LazyInstantiationMonotoneSMTSolver {
                 println!("> Intermetiate solution found, testing for monotonicity..");
             }
             let current_model = self.get_model().unwrap();
-            let mut n_new_enforced_pairs = 0;
+            let mut n_new_enforced_lemmas = 0;
 
             // For each uninterpreted function, go over its occurences, evaluate them,
-            // look for pairs that break monotonicity, and assert them for the next iteration.
+            // look for pairs that break monotonicity lemmas, and assert them for the next iteration.
             for fn_apps in self.fun_occurences.values() {
                 // Collect rows with 0/1 separately, we only compare different output rows
-                let mut unique_table_rows_0 = HashSet::new();
-                let mut unique_table_rows_1 = HashSet::new();
+                let mut unique_table_rows_0 = HashMap::new();
+                let mut unique_table_rows_1 = HashMap::new();
 
                 for fn_app in fn_apps {
                     let evaluated_args: Vec<bool> = fn_app
@@ -762,9 +762,10 @@ impl MonotoneSMTSolver for LazyInstantiationMonotoneSMTSolver {
                         .unwrap();
 
                     if fn_output {
-                        unique_table_rows_1.insert(evaluated_args);
+                        // Inserting once is enough, we just need one fn application currently
+                        unique_table_rows_1.entry(evaluated_args).or_insert(fn_app);
                     } else {
-                        unique_table_rows_0.insert(evaluated_args);
+                        unique_table_rows_0.entry(evaluated_args).or_insert(fn_app);
                     }
                 }
 
@@ -773,13 +774,10 @@ impl MonotoneSMTSolver for LazyInstantiationMonotoneSMTSolver {
                 let fn_id = func_decl.name();
 
                 // Check for row pairs breaking monotonicity lemmas
-                for row_1 in &unique_table_rows_1 {
-                    for row_0 in &unique_table_rows_0 {
-                        // TODO: as version 2: use hashmaps, and assert full monotonicity lemma using 2 function applications
-                        // TODO: as version 3: use hashmaps, and assert full monotonicity lemma using all pairs of function applications
-
+                for (row_1, fn_app_1) in &unique_table_rows_1 {
+                    for (row_0, fn_app_0) in &unique_table_rows_0 {
                         // Check if the two rows satisfy monotonicity lemma assumptions, and if so,
-                        // assert f(row1) => f(row0)
+                        // assert the corresponding monotonicity lemma (in its general form)
                         let mut assumptions_sat = true;
                         for (i, (val_1, val_0)) in row_1.iter().zip(row_0.iter()).enumerate() {
                             // If the two values are equal, it cant break any of the three assumption types
@@ -812,27 +810,39 @@ impl MonotoneSMTSolver for LazyInstantiationMonotoneSMTSolver {
                             }
                         }
 
+                        // TODO: try creating monotonicity for all pairs of function applications
+                        //       that resulted in the two rows
+
                         if assumptions_sat {
+                            // Can be unwrapped, args must be different (since output is different)
+                            let lemma = create_monotonicity_lemma(
+                                &fn_app_1.full_app,
+                                &fn_app_0.full_app,
+                                &self.monotonicity_defs,
+                            )
+                            .unwrap();
+                            self.smt_solver.assert(&lemma);
+                            /*
+                            // Prototype version with concrete rows assertion
                             // Assert the monotonicity constraint `f(row_1) => f(row_0)`
                             let app1 = apply_fn_to_table_row(row_1, &func_decl);
                             let app2 = apply_fn_to_table_row(row_0, &func_decl);
                             self.smt_solver.assert(&app1.implies(&app2));
-                            n_new_enforced_pairs += 1;
+                            */
+                            n_new_enforced_lemmas += 1;
                         }
                     }
                 }
             }
 
             // If there are no function with broken monotonicity, we have a SAT solution
-            if n_new_enforced_pairs == 0 {
+            if n_new_enforced_lemmas == 0 {
                 if self.verbose {
-                    println!(
-                        "> Solution found after enforcing {n_enforced_pairs} monotonicity row pairs.."
-                    );
+                    println!("> Solution found after enforcing {n_enforced_lemmas} lemmas..");
                 }
                 return SatResult::Sat;
             }
-            n_enforced_pairs += n_new_enforced_pairs;
+            n_enforced_lemmas += n_new_enforced_lemmas;
         }
     }
 
