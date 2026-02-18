@@ -1,6 +1,6 @@
 use crate::InferenceProblem;
 use crate::state_specification::StateSpecification;
-use crate::tests::get_instatiation_solver;
+use crate::tests::get_instantiation_solver;
 use biodivine_lib_param_bn::{BooleanNetwork, FnUpdate, VariableId};
 use num_rational::BigRational;
 use num_traits::FromPrimitive;
@@ -64,7 +64,7 @@ fn one_fixed_point_must_positive() {
     problem.assert_fixed_point("fix");
     problem.assert_state_observation("fix", &specification);
 
-    let solver = get_instatiation_solver(&problem);
+    let solver = get_instantiation_solver(&problem);
     assert_eq!(solver.check(), SatResult::Sat);
     let model = solver.get_model().unwrap();
     assert_eq!(fix.extract_state(&model), vec![false, true, false]);
@@ -85,7 +85,7 @@ fn one_fixed_point_must_negative() {
     problem.assert_fixed_point("fix");
     problem.assert_state_observation("fix", &specification);
 
-    let solver = get_instatiation_solver(&problem);
+    let solver = get_instantiation_solver(&problem);
     assert_eq!(solver.check(), SatResult::Unsat);
 }
 
@@ -105,7 +105,7 @@ fn one_fixed_point_may() {
     problem.assert_fixed_point("fix");
     problem.assert_state_observation("fix", &specification);
 
-    let solver = get_instatiation_solver(&problem);
+    let solver = get_instantiation_solver(&problem);
     assert_eq!(solver.check(), SatResult::Sat);
     let model = solver.get_model().unwrap();
     // Note that a=0, even though specification requires a=1.
@@ -135,7 +135,7 @@ fn two_fixed_point_must_positive() {
     problem.assert_state_observation("fix-1", &spec_one);
     problem.assert_state_observation("fix-2", &spec_two);
 
-    let solver = get_instatiation_solver(&problem);
+    let solver = get_instantiation_solver(&problem);
     assert_eq!(solver.check(), SatResult::Sat);
     let model = solver.get_model().unwrap();
     assert_eq!(fix_one.extract_state(&model), vec![false, true, false]);
@@ -167,7 +167,7 @@ fn two_fixed_point_may() {
     problem.assert_state_observation("fix-1", &spec_one);
     problem.assert_state_observation("fix-2", &spec_two);
 
-    let solver = get_instatiation_solver(&problem);
+    let solver = get_instantiation_solver(&problem);
     assert_eq!(solver.check(), SatResult::Sat);
     let model = solver.get_model().unwrap();
     assert_eq!(fix_one.extract_state(&model), vec![false, true, false]);
@@ -196,7 +196,7 @@ fn one_in_two_fixed_point_optimize() {
     problem.assert_fixed_point("fix");
     problem.assert_state_observation("fix", &specification);
 
-    let solver = get_instatiation_solver(&problem);
+    let solver = get_instantiation_solver(&problem);
     assert_eq!(solver.check(), SatResult::Sat);
     let model = solver.get_model().unwrap();
     assert_eq!(fix.extract_state(&model), vec![false, true, false]);
@@ -212,7 +212,7 @@ fn one_in_two_fixed_point_optimize() {
     problem.assert_fixed_point("fix");
     problem.assert_state_observation("fix", &specification);
 
-    let solver = get_instatiation_solver(&problem);
+    let solver = get_instantiation_solver(&problem);
     assert_eq!(solver.check(), SatResult::Sat);
     let model = solver.get_model().unwrap();
     assert_eq!(fix.extract_state(&model), vec![true, true, true]);
@@ -226,7 +226,7 @@ fn essentiality_positive() {
     bn.as_graph_mut().add_string_regulation("a -? c").unwrap();
 
     let problem = InferenceProblem::new(bn.clone());
-    let solver = get_instatiation_solver(&problem);
+    let solver = get_instantiation_solver(&problem);
     assert_eq!(solver.check(), SatResult::Sat);
 }
 
@@ -240,7 +240,7 @@ fn essentiality_negative() {
     bn.set_update_function(c, Some(FnUpdate::Var(b))).unwrap();
 
     let problem = InferenceProblem::new(bn.clone());
-    let solver = get_instatiation_solver(&problem);
+    let solver = get_instantiation_solver(&problem);
     assert_eq!(solver.check(), SatResult::Unsat);
 }
 
@@ -252,7 +252,7 @@ fn monotonicity_positive() {
     bn.as_graph_mut().add_string_regulation("a ->? c").unwrap();
 
     let problem = InferenceProblem::new(bn.clone());
-    let solver = get_instatiation_solver(&problem);
+    let solver = get_instantiation_solver(&problem);
     assert_eq!(solver.check(), SatResult::Sat);
 
     // Now make the update function negative in `a` and check that the solver is not sat.
@@ -260,7 +260,7 @@ fn monotonicity_positive() {
         .unwrap();
 
     let problem = InferenceProblem::new(bn.clone());
-    let solver = get_instatiation_solver(&problem);
+    let solver = get_instantiation_solver(&problem);
     assert_eq!(solver.check(), SatResult::Unsat);
 }
 
@@ -272,7 +272,7 @@ fn monotonicity_negative() {
     bn.as_graph_mut().add_string_regulation("a -|? c").unwrap();
 
     let problem = InferenceProblem::new(bn.clone());
-    let solver = get_instatiation_solver(&problem);
+    let solver = get_instantiation_solver(&problem);
     assert_eq!(solver.check(), SatResult::Unsat);
 
     // Now make the update function negative in `a` and check that the solver is sat.
@@ -280,6 +280,6 @@ fn monotonicity_negative() {
         .unwrap();
 
     let problem = InferenceProblem::new(bn.clone());
-    let solver = get_instatiation_solver(&problem);
+    let solver = get_instantiation_solver(&problem);
     assert_eq!(solver.check(), SatResult::Sat);
 }
