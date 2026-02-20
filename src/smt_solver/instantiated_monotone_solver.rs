@@ -51,7 +51,7 @@ impl MonotoneFunctionInfo {
             .map(|(i, (arg1, arg2))| {
                 match self.arguments.get(&i) {
                     Some(Monotonicity::Positive) => arg1.implies(arg2), // arg1 <= arg2
-                    Some(Monotonicity::Negative) => arg2.implies(arg1), // arg2 <= arg1
+                    Some(Monotonicity::Negative) => arg2.implies(arg1), // arg1 >= arg2
                     None => arg1.iff(arg2),                             // arg1 == arg2
                 }
             })
@@ -72,6 +72,14 @@ impl<INNER: AbstractSolver> InstantiatedMonotoneSolver<INNER> {
             has_asserted: false,
             function_info: HashMap::new(),
         }
+    }
+
+    pub fn count_used_lemmas(&self) -> usize {
+        let mut total = 0;
+        for v in self.function_info.values() {
+            total += v.lemmas.len();
+        }
+        total
     }
 
     fn ensure_function_info(&mut self, f: &FuncDecl) -> &mut MonotoneFunctionInfo {
