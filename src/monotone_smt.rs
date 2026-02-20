@@ -632,7 +632,6 @@ impl MonotoneSMTSolver for LazyInstantiationMonotoneSMTSolver {
                 (*entry).insert(app.clone());
             }
         }
-        println!("{}", self.count_fn_occurances());
     }
 
     /// Iteratively search for a valid solution by lazily enforcing monotonicity.
@@ -711,18 +710,21 @@ impl MonotoneSMTSolver for LazyInstantiationMonotoneSMTSolver {
                                     .and_then(|defs| defs.get(&i))
                                 {
                                     Some(Monotonicity::Positive) => {
-                                        if *val_1 && !*val_0 { // Assumption: val_1 => val_0
+                                        if *val_1 && !*val_0 {
+                                            // Assumption: val_1 => val_0
                                             assumptions_sat = false;
                                             break;
                                         }
                                     }
                                     Some(Monotonicity::Negative) => {
-                                        if !*val_1 && *val_0 { // Assumption: val_0 => val_1
+                                        if !*val_1 && *val_0 {
+                                            // Assumption: val_0 => val_1
                                             assumptions_sat = false;
                                             break;
                                         }
                                     }
-                                    None => { // Assumption: val_0 <=> val_1
+                                    None => {
+                                        // Assumption: val_0 <=> val_1
                                         assumptions_sat = false;
                                         break;
                                     }

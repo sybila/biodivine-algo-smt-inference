@@ -2,6 +2,7 @@ use biodivine_lib_param_bn::VariableId;
 use num_rational::BigRational;
 use num_traits::{One, Zero};
 use std::collections::BTreeMap;
+use z3::ast::Bool;
 
 /// A simple collection that assigns [`VariableId`] objects to `bool` value "observations", where
 /// each observation can have a rational "confidence" between `0` and `1`.
@@ -57,6 +58,19 @@ impl StateSpecification {
                     Some((*k, (*v, p.clone())))
                 }
             })
+            .collect()
+    }
+
+    pub fn get_value(&self, variable: &VariableId) -> Option<bool> {
+        self.0.get(variable).map(|pair| pair.0)
+    }
+
+    /// Transform the underlying specification into assigment of z3 Bools,
+    /// ignoring the weights.
+    pub fn make_z3_assertion_map(&self) -> BTreeMap<VariableId, Bool> {
+        self.0
+            .iter()
+            .map(|(k, (v, _))| (*k, Bool::from_bool(*v)))
             .collect()
     }
 }

@@ -266,6 +266,9 @@ impl InferenceProblem {
     }
 
     /// Build a [`z3::Optimize`] solver instance that implements all prescribed constraints.
+    ///
+    /// TODO: this is currently incompatible with [`SmtState::extract_state`] due to omitting
+    /// constant state variables not needed for the actual computation.
     pub fn build_solver(&self, encoding: EncodingMode) -> Box<dyn MonotoneSMTSolver> {
         let mut solver: Box<dyn MonotoneSMTSolver> = match encoding {
             EncodingMode::Quantified => Box::new(QuantifiedMonotoneSMTSolver::new()),
@@ -314,14 +317,21 @@ impl InferenceProblem {
             }
         }
 
-        // Assert that all state specifications are satisfied:
+        // Assert that all state specifications are satisfied.
+        // We specify fresh variables for optional soft constraint values. The constants from hard
+        // constraints will be asserted directly in the formula (no need to create SMT variables).
         for (name, specification) in &self.state_specification {
             let state = self.get_state(name);
+
+            // TODO: These smt variables for hard constraints are not needed. Uncomment this to add
+            //       them so you can continue using [`SmtState::extract_state`] without modifications.
+            /*
             for (bn_var, value) in specification.make_required_assertion_map() {
                 let smt_var = state.get_smt_var(bn_var);
                 let assertion = if value { smt_var } else { smt_var.not() };
                 solver.assert(&assertion);
             }
+            */
 
             for (bn_var, (value, confidence)) in specification.make_optional_assertion_map() {
                 let smt_var = state.get_smt_var(bn_var);
@@ -353,15 +363,38 @@ impl InferenceProblem {
             }
         }
 
-        // Finally, assert that every state that should be a fixed-point is a fixed-point:
+        // Finally, assert that every state that should be a fixed-point is a fixed-point.
+        // Previously defined SMT variables are used as function args for soft constraints,
+        // and constants are used for hard constraints.
         for name in &self.fixed_points {
             let state = self.get_state(name);
-            let state_var_map = state.make_smt_var_map();
-            for (bn_var, smt_var) in &state_var_map {
+
+            let specification = self.state_specification.get(name).unwrap();
+            let hard_constants_map: BTreeMap<VariableId, Bool> = specification
+                .make_required_assertion_map()
+                .iter()
+                .map(|(k, v)| (*k, Bool::from_bool(*v)))
+                .collect();
+
+            // Mapping from BN variables to either fresh SMT variables (soft constraints), or
+            // directly to constants (hard constraints)
+            let state_var_map: BTreeMap<VariableId, Bool> = state
+                .make_smt_var_map()
+                .into_iter()
+                .map(|(k, value)| {
+                    if let Some(constant) = hard_constants_map.get(&k) {
+                        (k, constant.clone())
+                    } else {
+                        (k, value)
+                    }
+                })
+                .collect();
+
+            for (bn_var, smt_val) in &state_var_map {
                 let update = self.get_update_function(*bn_var);
                 let smt_update =
                     fn_update_to_smt(update, &state_var_map, &self.uninterpreted_symbols);
-                solver.assert(&smt_var.iff(smt_update));
+                solver.assert(&smt_val.iff(smt_update));
             }
         }
 
