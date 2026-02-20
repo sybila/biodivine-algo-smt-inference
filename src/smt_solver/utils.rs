@@ -1,56 +1,35 @@
 use crate::smt_solver::typed_ast::AstType;
 use anyhow::anyhow;
 use std::collections::HashSet;
-use z3::ast::{Ast, Bool};
+use z3::ast::{Ast, Bool, Dynamic};
 use z3::{DeclKind, FuncDecl};
 
-/// Assume the given argument is a function application; extract and convert all its arguments
-/// to `Bool`. Panics if any of these assumptions fail.
-pub fn extract_bool_args<T: Ast>(e: &T) -> Vec<Bool> {
-    assert!(e.is_app(), "Must be a function application.");
-    e.children()
-        .iter()
-        .map(|it| it.as_bool().expect("Argument is not of type `Bool`."))
-        .collect()
-}
+/// Extract all uninterpreted function applications from the given expression. The expression is
+/// only allowed to use `Int` and `Bool` functions.
+pub fn extract_function_applications(fml: &Bool) -> HashSet<Dynamic> {
+    let mut todo = vec![Dynamic::from_ast(fml)];
+    let mut results: HashSet<Dynamic> = HashSet::new();
+    let mut seen: HashSet<Dynamic> = HashSet::new();
 
-/// Extract all applications of *Boolean* functions from the given expression.
-pub fn extract_function_applications(fml: &Bool) -> HashSet<Bool> {
-    let mut todo = vec![fml.clone()];
-    let mut res: HashSet<Bool> = HashSet::new();
-    let mut seen: HashSet<Bool> = HashSet::new();
-
-    while let Some(cur) = todo.pop() {
-        if !cur.is_app() {
-            continue;
+    while let Some(expr) = todo.pop() {
+        // Regardless of expression type, we want to explore all child expressions, assuming
+        // we have not seen them before.
+        for child in expr.children() {
+            if !seen.contains(&child) {
+                seen.insert(child.clone());
+                todo.push(child);
+            }
         }
 
-        match cur.decl().kind() {
-            DeclKind::UNINTERPRETED => {
-                if cur.num_children() > 0 {
-                    res.insert(cur.clone());
-                }
-            }
-            DeclKind::TRUE | DeclKind::FALSE => {}
-            DeclKind::EQ
-            | DeclKind::AND
-            | DeclKind::OR
-            | DeclKind::NOT
-            | DeclKind::IFF
-            | DeclKind::IMPLIES => {
-                for child in cur.children() {
-                    let bool_child = child.as_bool().unwrap();
-                    if !seen.contains(&bool_child) {
-                        seen.insert(bool_child.clone());
-                        todo.push(bool_child);
-                    }
-                }
-            }
-            _ => panic!("Unsupported {}", cur),
+        // Check if the expression is a non-trivial uninterpreted function application, and if so,
+        // save it.
+        if expr.num_children() > 0 && expr.is_app() && expr.decl().kind() == DeclKind::UNINTERPRETED
+        {
+            results.insert(expr.clone());
         }
     }
 
-    res
+    results
 }
 
 /// Extract the type signature of the given `function`, assuming it only has [`AstType`] arguments

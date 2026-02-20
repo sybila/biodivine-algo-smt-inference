@@ -49,7 +49,7 @@ impl AstType {
 ///
 /// Technically, we could achieve similar behavior using methods that are already available
 /// for the [`Dynamic`] AST node, but this makes it slightly more idiomatic in Rust.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub enum TypedAst {
     Int(Int),
     Bool(Bool),
@@ -135,7 +135,23 @@ impl TypedAst {
             (TypedAst::Int(a), TypedAst::Int(b)) => Ok(a.le(b)),
             (TypedAst::Bool(a), TypedAst::Bool(b)) => Ok(a.implies(b)),
             _ => Err(anyhow!(
-                "Cannot compare. `{}` and `{}` are incompatible: `{:?} != {:?}`",
+                "`{}` and `{}` are incomparable: `{:?} != {:?}`",
+                self,
+                other,
+                self.sort_kind(),
+                other.sort_kind()
+            )),
+        }
+    }
+
+    /// Produce a [`Bool`] expression that is equivalent to `self == other`. Currently, this
+    /// operation is only supported if both ASTs are of the same type.
+    pub fn eq(&self, other: &TypedAst) -> Result<Bool, anyhow::Error> {
+        match (self, other) {
+            (TypedAst::Int(a), TypedAst::Int(b)) => Ok(a.eq(b)),
+            (TypedAst::Bool(a), TypedAst::Bool(b)) => Ok(a.iff(b)),
+            _ => Err(anyhow!(
+                "`{}` and `{}` are incomparable: `{:?} != {:?}`",
                 self,
                 other,
                 self.sort_kind(),
