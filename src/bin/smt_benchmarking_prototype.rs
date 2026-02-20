@@ -58,10 +58,12 @@ fn main() {
     if args.verbose {
         println!("Building solver using `{}` encoding..", args.solver);
     }
-    let solver = if args.solver == "quantified" {
-        inference.build_solver(EncodingMode::Quantified)
-    } else {
-        inference.build_solver(EncodingMode::Instantiation)
+
+    let solver = match args.solver.as_str() {
+        "quantified" => inference.build_solver(EncodingMode::Quantified),
+        "quantified-optimized" => inference.build_solver(EncodingMode::QuantifiedOptimized),
+        "instantiation" => inference.build_solver(EncodingMode::Instantiation),
+        _ => panic!("Unknown solver: {}", args.solver),
     };
 
     if args.verbose {

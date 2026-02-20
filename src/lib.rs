@@ -53,6 +53,7 @@ pub struct InferenceProblem {
 
 pub enum EncodingMode {
     Quantified,
+    QuantifiedOptimized,
     Instantiation,
 }
 
@@ -273,7 +274,10 @@ impl InferenceProblem {
     pub fn build_solver(&self, encoding: EncodingMode) -> DynOptimizeSolver {
         let mut solver: DynMonotoneOptimizeSolver = match encoding {
             EncodingMode::Quantified => {
-                Box::new(QuantifiedMonotoneSolver::new(z3::Optimize::new()))
+                Box::new(QuantifiedMonotoneSolver::new(z3::Optimize::new(), false))
+            }
+            EncodingMode::QuantifiedOptimized => {
+                Box::new(QuantifiedMonotoneSolver::new(z3::Optimize::new(), true))
             }
             EncodingMode::Instantiation => {
                 Box::new(InstantiatedMonotoneSolver::new(z3::Optimize::new()))
