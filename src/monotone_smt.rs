@@ -67,7 +67,7 @@ pub trait InstantiationMonotoneSMTSolver: MonotoneSMTSolver {
     /// monotonicity constraints.
     ///
     /// For now, this just returns a mapping "fn_id" -> "dnf string expression". The args in
-    /// the dnf expressions are simply named x_0, x_1, ... (must be renamed before used in a BN).
+    /// the dnf expressions are simply named xxxxx_0, xxxxx_1, ... (must be renamed before used in a BN).
     fn repair_monotonicity(&self, model: &Model) -> HashMap<FuncDeclIdentifier, String> {
         let mut monotone_fn_expressions = HashMap::new();
         for (fn_id, fn_apps) in self.get_collected_fn_occurences() {
@@ -111,7 +111,7 @@ pub trait InstantiationMonotoneSMTSolver: MonotoneSMTSolver {
             }
 
             let unique_clauses_dnf = DNF::new(unique_dnf_clauses);
-            let var_names: Vec<String> = (0..arity).map(|i| format!("x_{}", i)).collect();
+            let var_names: Vec<String> = (0..arity).map(|i| format!("xxxxx_{}", i)).collect();
             let expression = unique_clauses_dnf.create_dnf_expression(&var_names);
 
             monotone_fn_expressions.insert(fn_id.clone(), expression.to_string());

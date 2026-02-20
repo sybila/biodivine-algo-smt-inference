@@ -467,10 +467,13 @@ impl InferenceProblem {
 }
 
 /// Given a general expression of a previously unintepreted function, substitute all formal
-/// args (x_0, x_1, ..) with the actual arguments that the function is applied to (in the
+/// args (xxxxx_0, xxxxx_1, ..) with the actual arguments that the function is applied to (in the
 /// BN's update).
 ///
 /// Return a new FnUpdate instance for the expression, with substituted variable names.
+///
+/// WARNING: Since we now only use simple string rewriting, this can break if BN variables
+/// contain "xxxxx_N" substrings.
 pub fn substitute_fn_args(
     expression: &str,
     applied_args: Vec<FnUpdate>,
@@ -480,7 +483,7 @@ pub fn substitute_fn_args(
     let mut renaming = BTreeMap::new();
     for (i, arg) in applied_args.iter().enumerate() {
         assert!(matches!(arg, FnUpdate::Var(_)));
-        renaming.insert(format!("x_{}", i), format!("({})", arg.to_string(psbn)));
+        renaming.insert(format!("xxxxx_{}", i), format!("({})", arg.to_string(psbn)));
     }
 
     // Sort by len, since this is just string pattern matching substitution
