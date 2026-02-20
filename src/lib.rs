@@ -314,9 +314,9 @@ impl InferenceProblem {
                     .get(fun_id)
                     .expect("Invalid parameter id.");
                 if m == Activation {
-                    solver.set_monotone(fun, index);
+                    solver.set_monotone(fun, index).unwrap();
                 } else {
-                    solver.set_antimonotone(fun, index);
+                    solver.set_antimonotone(fun, index).unwrap();
                 }
             }
         }

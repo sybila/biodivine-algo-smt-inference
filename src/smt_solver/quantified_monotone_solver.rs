@@ -1,19 +1,25 @@
+use crate::smt_solver::typed_ast::{AstType, MapDynAst, TypedAst};
 use crate::smt_solver::{
-    AbstractMonotoneSolver, AbstractOptimizeSolver, AbstractSolver, make_dyn_vec,
+    AbstractMonotoneSolver, AbstractOptimizeSolver, AbstractSolver, extract_function_type_signature,
 };
+use anyhow::anyhow;
 use num_rational::BigRational;
 use z3::ast::{Bool, Dynamic, forall_const};
 use z3::{FuncDecl, Model, SatResult};
 
 pub struct QuantifiedMonotoneSolver<INNER: AbstractSolver> {
     inner: INNER,
+    optimize_boolean_quantifiers: bool,
 }
 
 impl<INNER: AbstractSolver> QuantifiedMonotoneSolver<INNER> {
-    pub fn new(inner: INNER) -> Self {
+    pub fn new(inner: INNER, optimize_boolean_quantifiers: bool) -> Self {
         // Gets rid of the "WARNING: optimization with quantified constraints is not supported"
         z3::set_global_param("warning", "false");
-        Self { inner }
+        Self {
+            inner,
+            optimize_boolean_quantifiers,
+        }
     }
 
     pub fn as_inner(&self) -> &INNER {
@@ -24,35 +30,105 @@ impl<INNER: AbstractSolver> QuantifiedMonotoneSolver<INNER> {
         self.inner
     }
 
-    fn mk_monotonicity_constraint(f: &FuncDecl, i: usize, is_positive: bool) -> Bool {
-        let vars: Vec<_> = (0..f.arity())
-            .map(|i| Bool::new_const(format!("arg_{}", i)))
+    fn mk_monotonicity_constraint(
+        f: &FuncDecl,
+        i: usize,
+        is_positive: bool,
+        optimize_boolean_quantifiers: bool,
+    ) -> Result<Bool, anyhow::Error> {
+        let (domain, range) = extract_function_type_signature(f)?;
+
+        if i >= domain.len() {
+            return Err(anyhow!(
+                "Argument `{}` not valid for function with arity `{}`.",
+                i,
+                f.arity()
+            ));
+        }
+
+        // Quantified variables representing function arguments:
+        let mut args: Vec<TypedAst> = domain
+            .iter()
+            .enumerate()
+            .map(|(i, it)| it.new_const(format!("arg_{}", i)))
             .collect();
-        let mut args = vars.clone();
 
-        args[i] = Bool::from_bool(true);
-        let f_with_true = f.apply(&make_dyn_vec(&args)).as_bool().unwrap();
+        if domain[i] == AstType::Bool && optimize_boolean_quantifiers {
+            // If the argument is a Bool, we can build a slightly more optimized encoding:
+            // Positive: `forall args: f(args[i=0]) <= f(args[i=1])`
+            // Negative: `forall args: f(args[i=0]) >= f(args[i=1])`
 
-        args[i] = Bool::from_bool(false);
-        let f_with_false = f.apply(&make_dyn_vec(&args)).as_bool().unwrap();
+            args[i] = TypedAst::Bool(Bool::from_bool(false));
+            let f_args_0 = TypedAst::extract(range, f.apply(&args.iter().dyn_vec()));
+            args[i] = TypedAst::Bool(Bool::from_bool(true));
+            let f_args_1 = TypedAst::extract(range, f.apply(&args.iter().dyn_vec()));
 
-        let body = if is_positive {
-            f_with_false.implies(f_with_true)
+            let f_args_0_le_f_args_1 = if is_positive {
+                f_args_0.le(&f_args_1)?
+            } else {
+                f_args_1.le(&f_args_0)?
+            };
+
+            args.remove(i); // The constant value does not need to be quantified.
+            return Ok(forall_const(
+                &args.iter().dyn_vec(),
+                &[],
+                &f_args_0_le_f_args_1,
+            ));
+        }
+
+        // Otherwise, for `Int` values we are building this generic formula:
+        // Positive: `forall args,y: (args[i] <= y) -> (f(args) <= f(args[i=y]))`
+        // Negative: `forall args,y: (args[i] <= y) -> (f(args) >= f(args[i=y]))`
+
+        let y = domain[i].new_const("y");
+
+        // A copy of `args` that will be used for quantification:
+        let mut quantified_vars = Vec::new();
+        quantified_vars.push(y.clone());
+        quantified_vars.extend(args.clone());
+
+        // args[i] <= y
+        let args_i_le_y = args[i].le(&y)?;
+
+        let f_args = TypedAst::extract(range, f.apply(&args.iter().dyn_vec()));
+        args[i] = y;
+        let f_args_y = TypedAst::extract(range, f.apply(&args.iter().dyn_vec()));
+
+        // f(args) <= f(args[i=y]) (or swapped if not positive)
+        let f_args_le_f_args_y = if is_positive {
+            f_args.le(&f_args_y)?
         } else {
-            f_with_true.implies(f_with_false)
+            f_args_y.le(&f_args)?
         };
 
-        forall_const(&make_dyn_vec(&vars), &[], &body)
+        Ok(forall_const(
+            &quantified_vars.iter().dyn_vec(),
+            &[],
+            &args_i_le_y.implies(&f_args_le_f_args_y),
+        ))
     }
 }
 
 impl<INNER: AbstractSolver> AbstractMonotoneSolver for QuantifiedMonotoneSolver<INNER> {
-    fn set_monotone(&mut self, f: &FuncDecl, i: usize) {
-        self.assert(&Self::mk_monotonicity_constraint(f, i, true))
+    fn set_monotone(&mut self, f: &FuncDecl, i: usize) -> Result<(), anyhow::Error> {
+        self.assert(&Self::mk_monotonicity_constraint(
+            f,
+            i,
+            true,
+            self.optimize_boolean_quantifiers,
+        )?);
+        Ok(())
     }
 
-    fn set_antimonotone(&mut self, f: &FuncDecl, i: usize) {
-        self.assert(&Self::mk_monotonicity_constraint(f, i, false))
+    fn set_antimonotone(&mut self, f: &FuncDecl, i: usize) -> Result<(), anyhow::Error> {
+        self.assert(&Self::mk_monotonicity_constraint(
+            f,
+            i,
+            false,
+            self.optimize_boolean_quantifiers,
+        )?);
+        Ok(())
     }
 }
 
@@ -60,6 +136,7 @@ impl Default for QuantifiedMonotoneSolver<z3::Solver> {
     fn default() -> Self {
         QuantifiedMonotoneSolver {
             inner: z3::Solver::new(),
+            optimize_boolean_quantifiers: true,
         }
     }
 }

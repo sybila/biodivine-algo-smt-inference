@@ -115,7 +115,7 @@ impl<INNER: AbstractSolver> InstantiatedMonotoneSolver<INNER> {
 }
 
 impl<INNER: AbstractSolver> AbstractMonotoneSolver for InstantiatedMonotoneSolver<INNER> {
-    fn set_monotone(&mut self, f: &FuncDecl, i: usize) {
+    fn set_monotone(&mut self, f: &FuncDecl, i: usize) -> Result<(), anyhow::Error> {
         assert!(
             !self.has_asserted,
             "Monotonicity constraint must be declared before all assertions."
@@ -123,9 +123,10 @@ impl<INNER: AbstractSolver> AbstractMonotoneSolver for InstantiatedMonotoneSolve
         self.ensure_function_info(f)
             .arguments
             .insert(i, Monotonicity::Positive);
+        Ok(())
     }
 
-    fn set_antimonotone(&mut self, f: &FuncDecl, i: usize) {
+    fn set_antimonotone(&mut self, f: &FuncDecl, i: usize) -> Result<(), anyhow::Error> {
         assert!(
             !self.has_asserted,
             "Monotonicity constraint must be declared before all assertions."
@@ -133,6 +134,7 @@ impl<INNER: AbstractSolver> AbstractMonotoneSolver for InstantiatedMonotoneSolve
         self.ensure_function_info(f)
             .arguments
             .insert(i, Monotonicity::Negative);
+        Ok(())
     }
 }
 

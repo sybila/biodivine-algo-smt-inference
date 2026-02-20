@@ -14,12 +14,18 @@ pub type DynMonotoneOptimizeSolver = Box<dyn AbstractMonotoneOptimizeSolver>;
 
 /// Trait implemented by solvers that can explicitly reason about functions with monotone inputs.
 pub trait AbstractMonotoneSolver: AbstractSolver {
-    /// Declare the i-th argument of a function as *positively monotone*. Both the arguments
-    /// and the output of the function must be of the type `Bool`.
-    fn set_monotone(&mut self, f: &FuncDecl, i: usize);
-    /// Declare the i-th argument of a function as *negatively monotone*. Both the arguments
-    /// and the output of the function must be of the type `Bool`.
-    fn set_antimonotone(&mut self, f: &FuncDecl, i: usize);
+    /// Declare the i-th argument of a function as *positively monotone*.
+    ///
+    /// What type of function can be declared as monotone is solver-dependent, but typically,
+    /// the solver should support functions with domain/range using `Int` and `Bool` values.
+    /// Returns an error result if the function-argument combination is not supported.
+    fn set_monotone(&mut self, f: &FuncDecl, i: usize) -> Result<(), anyhow::Error>;
+    /// Declare the i-th argument of a function as *negatively monotone*.
+    ///
+    /// What type of function can be declared as monotone is solver-dependent, but typically,
+    /// the solver should support functions with domain/range using `Int` and `Bool` values.
+    /// /// Returns an error result if the function-argument combination is not supported.
+    fn set_antimonotone(&mut self, f: &FuncDecl, i: usize) -> Result<(), anyhow::Error>;
 }
 
 /// Trait that can be used as a placeholder for `AbstractOptimizeSolver + AbstractMonotoneSolver`.
@@ -29,11 +35,11 @@ pub trait AbstractMonotoneOptimizeSolver: AbstractOptimizeSolver + AbstractMonot
 impl<T: AbstractOptimizeSolver + AbstractMonotoneSolver> AbstractMonotoneOptimizeSolver for T {}
 
 impl AbstractMonotoneSolver for DynMonotoneSolver {
-    fn set_monotone(&mut self, f: &FuncDecl, i: usize) {
+    fn set_monotone(&mut self, f: &FuncDecl, i: usize) -> Result<(), anyhow::Error> {
         self.as_mut().set_monotone(f, i)
     }
 
-    fn set_antimonotone(&mut self, f: &FuncDecl, i: usize) {
+    fn set_antimonotone(&mut self, f: &FuncDecl, i: usize) -> Result<(), anyhow::Error> {
         self.as_mut().set_antimonotone(f, i)
     }
 }
