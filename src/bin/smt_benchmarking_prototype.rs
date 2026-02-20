@@ -87,7 +87,9 @@ fn main() {
         && let Some(output_path) = args.output_path
     {
         let model = solver.get_model().unwrap();
-        // println!("{:?}", model);
+        //if args.verbose {
+        //    println!("{:?}", model);
+        //}
 
         // Reconstruct the BN instance using the functions extracted from the z3 model
         // and output the extracted BN.

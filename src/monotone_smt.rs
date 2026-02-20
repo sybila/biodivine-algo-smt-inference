@@ -26,7 +26,7 @@ pub trait MonotoneSMTSolver {
     /// Hard satisfiability assertion.
     fn assert(&mut self, formula: &Bool);
 
-    /// Check if the querry is satisfiable.
+    /// Check if the query is satisfiable.
     fn check(&self) -> SatResult;
 
     /// Get the model for the last [Self::check] (if a model was found).
@@ -41,7 +41,7 @@ pub trait MonotoneSMTSolver {
 
     fn set_verbose(&mut self);
 
-    /// Downcast into InstantiationMonotoneSMTSolver if the solver implements
+    /// Downcast into InstantiationMonotoneSMTSolver if the solver instance implements
     /// the sub-trait as well.
     fn as_instantiation_solver(&self) -> Option<&dyn InstantiationMonotoneSMTSolver> {
         None
@@ -69,8 +69,6 @@ pub trait InstantiationMonotoneSMTSolver: MonotoneSMTSolver {
     ///
     /// For now, this just returns a mapping "fn_id" -> "dnf string expression". The args in
     /// the dnf expressions are simply named x_0, x_1, ... (must be renamed before used in a BN).
-    ///
-    /// TODO: There are lots inefficiencies in this prototype, gotta refactor it once it is working.
     fn repair_monotonicity(&self, model: &Model) -> HashMap<FuncDeclIdentifier, String> {
         let mut monotone_fn_expressions = HashMap::new();
         for (fn_id, fn_apps) in self.get_collected_fn_occurences() {
@@ -336,9 +334,6 @@ fn get_function_applications(fml: &Bool) -> HashSet<FunctionApp> {
 }
 
 /// Creates a monotonicity lemma between two applications of the same function.
-/// Compares arguments: for each differing argument, applies the monotonicity constraint.
-/// Returns a lemma: (assumptions) => (app1 implies app2)
-///
 /// None is returned if functions are applied to the exactly same arguments.
 fn create_monotonicity_lemma(
     app1: &Bool,
@@ -664,8 +659,9 @@ impl MonotoneSMTSolver for LazyInstantiationMonotoneSMTSolver {
             // look for pairs that break monotonicity lemmas, and assert them for the next iteration.
             for fn_apps in self.fun_occurences.values() {
                 // Collect rows with 0/1 separately, we only compare different output rows
-                let mut unique_table_rows_0 = HashMap::new();
-                let mut unique_table_rows_1 = HashMap::new();
+                // For each row, collect all fn applications that evaluate to it
+                let mut unique_table_rows_0: HashMap<Vec<bool>, Vec<&FunctionApp>> = HashMap::new();
+                let mut unique_table_rows_1: HashMap<Vec<bool>, Vec<&FunctionApp>> = HashMap::new();
 
                 for fn_app in fn_apps {
                     let evaluated_args: Vec<bool> = fn_app
@@ -680,10 +676,11 @@ impl MonotoneSMTSolver for LazyInstantiationMonotoneSMTSolver {
                         .unwrap();
 
                     if fn_output {
-                        // Inserting once is enough, we just need one fn application currently
-                        unique_table_rows_1.entry(evaluated_args).or_insert(fn_app);
+                        let entry = unique_table_rows_1.entry(evaluated_args).or_default();
+                        (*entry).push(fn_app);
                     } else {
-                        unique_table_rows_0.entry(evaluated_args).or_insert(fn_app);
+                        let entry = unique_table_rows_0.entry(evaluated_args).or_default();
+                        (*entry).push(fn_app);
                     }
                 }
 
@@ -692,8 +689,8 @@ impl MonotoneSMTSolver for LazyInstantiationMonotoneSMTSolver {
                 let fn_id = func_decl.name();
 
                 // Check for row pairs breaking monotonicity lemmas
-                for (row_1, fn_app_1) in &unique_table_rows_1 {
-                    for (row_0, fn_app_0) in &unique_table_rows_0 {
+                for (row_1, fn_apps_1) in &unique_table_rows_1 {
+                    for (row_0, fn_apps_0) in &unique_table_rows_0 {
                         // Check if the two rows satisfy monotonicity lemma assumptions, and if so,
                         // assert the corresponding monotonicity lemma (in its general form)
                         let mut assumptions_sat = true;
@@ -728,18 +725,21 @@ impl MonotoneSMTSolver for LazyInstantiationMonotoneSMTSolver {
                             }
                         }
 
-                        // TODO: try creating monotonicity for all pairs of function applications
-                        //       that resulted in the two rows
-
                         if assumptions_sat {
-                            // Can be unwrapped, args must be different (since output is different)
-                            let lemma = create_monotonicity_lemma(
-                                &fn_app_1.full_app,
-                                &fn_app_0.full_app,
-                                &self.monotonicity_defs,
-                            )
-                            .unwrap();
-                            self.smt_solver.assert(&lemma);
+                            // Go over all pairs of fn applications and add the lemmas
+                            for fn_app_1 in fn_apps_1 {
+                                for fn_app_0 in fn_apps_0 {
+                                    // Can be unwrapped, args must be different (since output is different)
+                                    let lemma = create_monotonicity_lemma(
+                                        &fn_app_1.full_app,
+                                        &fn_app_0.full_app,
+                                        &self.monotonicity_defs,
+                                    )
+                                    .unwrap();
+                                    self.smt_solver.assert(&lemma);
+                                    n_new_enforced_lemmas += 1;
+                                }
+                            }
                             /*
                             // Prototype version with concrete rows assertion
                             // Assert the monotonicity constraint `f(row_1) => f(row_0)`
@@ -747,7 +747,6 @@ impl MonotoneSMTSolver for LazyInstantiationMonotoneSMTSolver {
                             let app2 = apply_fn_to_table_row(row_0, &func_decl);
                             self.smt_solver.assert(&app1.implies(&app2));
                             */
-                            n_new_enforced_lemmas += 1;
                         }
                     }
                 }
