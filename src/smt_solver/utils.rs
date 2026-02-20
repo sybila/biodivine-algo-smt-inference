@@ -1,14 +1,11 @@
+use crate::smt_solver::typed_ast::AstType;
+use anyhow::anyhow;
 use std::collections::HashSet;
-use z3::DeclKind;
 use z3::ast::{Ast, Bool};
-
-/// Convert `Bool` arguments into dynamic references (required by some Z3 APIs).
-pub fn make_dyn_vec(asts: &[Bool]) -> Vec<&dyn Ast> {
-    asts.iter().map(|it| it as &dyn Ast).collect()
-}
+use z3::{DeclKind, FuncDecl};
 
 /// Assume the given argument is a function application; extract and convert all its arguments
-/// to `Bool`. Panics if any of these assumptions fails.
+/// to `Bool`. Panics if any of these assumptions fail.
 pub fn extract_bool_args<T: Ast>(e: &T) -> Vec<Bool> {
     assert!(e.is_app(), "Must be a function application.");
     e.children()
@@ -54,4 +51,24 @@ pub fn extract_function_applications(fml: &Bool) -> HashSet<Bool> {
     }
 
     res
+}
+
+/// Extract the type signature of the given `function`, assuming it only has [`AstType`] arguments
+/// and output.
+pub fn extract_function_type_signature(
+    function: &FuncDecl,
+) -> Result<(Vec<AstType>, AstType), anyhow::Error> {
+    let args = (0..function.arity())
+        .map(|i| AstType::try_from(function.domain(i).unwrap()))
+        .collect::<Result<Vec<_>, anyhow::Error>>()
+        .map_err(|err| {
+            anyhow!(
+                "Function {:?} has invalid argument type ({}).",
+                function,
+                err
+            )
+        })?;
+    let out = AstType::try_from(function.range())
+        .map_err(|err| anyhow!("Function {:?} has invalid return type ({}).", function, err))?;
+    Ok((args, out))
 }
