@@ -1,4 +1,10 @@
-use biodivine_algo_smt_inference::EncodingMode;
+use biodivine_algo_smt_inference::bn_inference::InferenceProblem;
+use biodivine_algo_smt_inference::bn_inference::constraints::{
+    StateHasExactObservation, StateIsFixedPoint, StateObservation,
+};
+use biodivine_algo_smt_inference::smt_solver::{
+    DynMonotoneSolver, InstantiatedMonotoneSolver, QuantifiedMonotoneSolver,
+};
 use biodivine_algo_smt_inference::{Dataset, Observation};
 use biodivine_lib_param_bn::{BooleanNetwork, ModelAnnotation};
 use clap::Parser;
@@ -13,7 +19,7 @@ struct Arguments {
     model_path: String,
 
     /// Solver class to use.
-    #[clap(value_parser = PossibleValuesParser::new(["quantified", "instantiation"]))]
+    #[clap(value_parser = PossibleValuesParser::new(["quantified", "quantified-optimized", "instantiation"]))]
     solver: String,
 
     /// Enable verbose output (otherwise, only "0" or "1" is printed at the end).
@@ -25,10 +31,10 @@ struct Arguments {
     output_path: Option<String>,
 }
 
-fn main() {
+fn main() -> Result<(), anyhow::Error> {
     let args = Arguments::parse();
 
-    let model_string = std::fs::read_to_string(&args.model_path).unwrap();
+    let model_string = std::fs::read_to_string(&args.model_path)?;
     let psbn = BooleanNetwork::try_from(model_string.as_str()).unwrap();
     let psbn = psbn.name_implicit_parameters();
 
@@ -39,19 +45,15 @@ fn main() {
     let mut observations = BTreeMap::new();
     if let Some(fix_node) = annotations.get_child(&["fix"]) {
         for (fp_id, fp_values) in fix_node.children() {
-            let value_dict_str = fp_values.value().expect("Missing annotation value");
-            // Convert Python literal format to JSON format.
-            let json_str = value_dict_str
-                .replace('\'', "\"")
-                .replace(": True", ": true")
-                .replace(": False", ": false");
-
-            let map: BTreeMap<String, bool> = serde_json::from_str(&json_str)
-                .expect("Failed to parse fixed-point string as JSON");
+            let json_str = fp_values.value().expect("Missing annotation value");
+            let map: BTreeMap<String, u32> =
+                serde_json::from_str(json_str).expect("Failed to parse fixed-point string as JSON");
+            let map = map.into_iter().map(|(k, v)| (k, v > 0)).collect();
             observations.insert(fp_id.to_string(), Observation::from_value_map(map));
         }
     }
     let dataset = Dataset::new(observations);
+
     // Use data as hard constraints
     let inference = dataset.to_inference_problem(&psbn, None).unwrap();
 
@@ -59,18 +61,31 @@ fn main() {
         println!("Building solver using `{}` encoding..", args.solver);
     }
 
-    let solver = match args.solver.as_str() {
-        "quantified" => inference.build_solver(EncodingMode::Quantified),
-        "quantified-optimized" => inference.build_solver(EncodingMode::QuantifiedOptimized),
-        "instantiation" => inference.build_solver(EncodingMode::Instantiation),
+    let mut inference_problem =
+        InferenceProblem::<DynMonotoneSolver>::from_influence_graph(psbn.as_graph())?;
+    let mut solver: DynMonotoneSolver = match args.solver.as_str() {
+        "quantified" => Box::new(QuantifiedMonotoneSolver::new(z3::Solver::new(), false)),
+        "quantified-optimized" => Box::new(QuantifiedMonotoneSolver::new(z3::Solver::new(), true)),
+        "instantiation" => Box::new(InstantiatedMonotoneSolver::new(z3::Solver::new())),
         _ => panic!("Unknown solver: {}", args.solver),
     };
 
-    if args.verbose {
-        solver.register_model_handler(Box::new(move |_| {
-            println!("Solver made progress!");
-        }));
+    // Declare all fixed-points:
+    for (name, observation) in dataset.observations {
+        assert!(inference_problem.declare_state(name.as_str()));
+        let observation = observation
+            .value_map
+            .iter()
+            .map(|(k, v)| (inference_problem.find_variable(k).unwrap(), u32::from(*v)))
+            .collect::<Vec<_>>();
+        let observation = StateObservation::from_exact(observation);
+        let obs_constraint = StateHasExactObservation::new(name.as_str(), observation);
+        let fix_constraint = StateIsFixedPoint::new(name.as_str());
+        inference_problem.assert_constraint(obs_constraint)?;
+        inference_problem.assert_constraint(fix_constraint)?;
     }
+
+    inference_problem.build_solver(&mut solver)?;
 
     if args.verbose {
         println!("Checking for solution...");
@@ -83,7 +98,7 @@ fn main() {
         println!("{}", res);
     }
 
-    // If we have a model and output path was given, save it
+    // If we have a model and an output path was given, save it
     if result == SatResult::Sat
         && let Some(output_path) = args.output_path
     {
@@ -97,6 +112,8 @@ fn main() {
         // This works well as long as all update functions are just an uninterpreted
         // function applied to variable's regulators.
         let bn_instance = inference.extract_bn_instance_simplified(&model);
-        std::fs::write(output_path, bn_instance.to_string()).unwrap();
+        std::fs::write(output_path, bn_instance.to_string())?;
     }
+
+    Ok(())
 }

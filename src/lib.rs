@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use z3::ast::{Ast, Bool};
 use z3::{FuncDecl, Model, Sort};
 
+pub mod bn_inference;
 pub mod smt_solver;
 
 /// A data structure which defines one state that is supposed to exist in a BN.

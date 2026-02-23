@@ -43,6 +43,20 @@ impl AstType {
             AstType::Bool => Bool::new_const(name).into(),
         }
     }
+
+    pub fn new_value(&self, value: u32) -> TypedAst {
+        match self {
+            AstType::Int => Int::from_u64(u64::from(value)).into(),
+            AstType::Bool => Bool::from_bool(value > 0).into(),
+        }
+    }
+
+    pub fn new_fresh_const(&self, prefix: &str) -> TypedAst {
+        match self {
+            AstType::Int => Int::fresh_const(prefix).into(),
+            AstType::Bool => Bool::fresh_const(prefix).into(),
+        }
+    }
 }
 
 /// An enum wrapper for the supported AST kinds.
@@ -99,7 +113,7 @@ impl TypedAst {
     /// # Panics
     ///
     /// The method panics if the given `value` has an unexpected type.
-    pub fn extract(value_type: AstType, value: Dynamic) -> TypedAst {
+    pub fn cast_dynamic(value_type: AstType, value: Dynamic) -> TypedAst {
         match value_type {
             AstType::Int => value.as_int().map(TypedAst::Int).unwrap_or_else(|| {
                 panic!("Expected `Int`, but got `{:?}`.", value.sort_kind());
@@ -172,6 +186,12 @@ pub trait MapDynAst<'a, T>: Sized {
 }
 
 impl<'a, I: Iterator<Item = &'a TypedAst>> MapDynAst<'a, &'a TypedAst> for I {
+    fn map_dyn(self) -> impl Iterator<Item = &'a dyn Ast> {
+        self.map(|x| x.as_dyn_ref())
+    }
+}
+
+impl<'a, 'b, I: Iterator<Item = &'b &'a TypedAst>> MapDynAst<'a, &'b &'a TypedAst> for I {
     fn map_dyn(self) -> impl Iterator<Item = &'a dyn Ast> {
         self.map(|x| x.as_dyn_ref())
     }

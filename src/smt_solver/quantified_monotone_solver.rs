@@ -59,9 +59,9 @@ impl<INNER: AbstractSolver> QuantifiedMonotoneSolver<INNER> {
             // Negative: `forall args: f(args[i=0]) >= f(args[i=1])`
 
             args[i] = TypedAst::Bool(Bool::from_bool(false));
-            let f_args_0 = TypedAst::extract(range, f.apply(&args.iter().dyn_vec()));
+            let f_args_0 = TypedAst::cast_dynamic(range, f.apply(&args.iter().dyn_vec()));
             args[i] = TypedAst::Bool(Bool::from_bool(true));
-            let f_args_1 = TypedAst::extract(range, f.apply(&args.iter().dyn_vec()));
+            let f_args_1 = TypedAst::cast_dynamic(range, f.apply(&args.iter().dyn_vec()));
 
             let f_args_0_le_f_args_1 = if is_positive {
                 f_args_0.le(&f_args_1)?
@@ -91,9 +91,9 @@ impl<INNER: AbstractSolver> QuantifiedMonotoneSolver<INNER> {
         // args[i] <= y
         let args_i_le_y = args[i].le(&y)?;
 
-        let f_args = TypedAst::extract(range, f.apply(&args.iter().dyn_vec()));
+        let f_args = TypedAst::cast_dynamic(range, f.apply(&args.iter().dyn_vec()));
         args[i] = y;
-        let f_args_y = TypedAst::extract(range, f.apply(&args.iter().dyn_vec()));
+        let f_args_y = TypedAst::cast_dynamic(range, f.apply(&args.iter().dyn_vec()));
 
         // f(args) <= f(args[i=y]) (or swapped if not positive)
         let f_args_le_f_args_y = if is_positive {

@@ -58,8 +58,8 @@ impl FunctionMonotonicityData {
             .enumerate()
             .filter(|(_, ((arg1, arg2), _))| *arg1 != *arg2)
             .map(|(i, ((arg1, arg2), tt))| {
-                let arg1 = TypedAst::extract(*tt, arg1);
-                let arg2 = TypedAst::extract(*tt, arg2);
+                let arg1 = TypedAst::cast_dynamic(*tt, arg1);
+                let arg2 = TypedAst::cast_dynamic(*tt, arg2);
                 match self.arguments.get(&i) {
                     Some(Monotonicity::Positive) => arg1.le(&arg2), // arg1 <= arg2
                     Some(Monotonicity::Negative) => arg2.le(&arg1), // arg1 >= arg2

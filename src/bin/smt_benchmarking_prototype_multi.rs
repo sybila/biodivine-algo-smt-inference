@@ -46,15 +46,10 @@ fn main() {
     let mut observations = BTreeMap::new();
     if let Some(fix_node) = annotations.get_child(&["fix"]) {
         for (fp_id, fp_values) in fix_node.children() {
-            let value_dict_str = fp_values.value().expect("Missing annotation value");
-            // Convert Python literal format to JSON format.
-            let json_str = value_dict_str
-                .replace('\'', "\"")
-                .replace(": True", ": true")
-                .replace(": False", ": false");
-
-            let map: BTreeMap<String, bool> = serde_json::from_str(&json_str)
-                .expect("Failed to parse fixed-point string as JSON");
+            let json_str = fp_values.value().expect("Missing annotation value");
+            let map: BTreeMap<String, u32> =
+                serde_json::from_str(json_str).expect("Failed to parse fixed-point string as JSON");
+            let map = map.into_iter().map(|(k, v)| (k, v > 0)).collect();
             observations.insert(fp_id.to_string(), Observation::from_value_map(map));
         }
     }

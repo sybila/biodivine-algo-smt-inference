@@ -1,14 +1,20 @@
-use biodivine_algo_smt_inference::{EncodingMode, InferenceProblem, SmtState, StateSpecification};
+use biodivine_algo_smt_inference::StateSpecification;
+use biodivine_algo_smt_inference::bn_inference::InferenceProblem;
+use biodivine_algo_smt_inference::bn_inference::constraints::{
+    StateHasWeightedObservation, StateIsFixedPoint,
+};
+use biodivine_algo_smt_inference::smt_solver::{
+    AbstractSolver, DynMonotoneOptimizeSolver, InstantiatedMonotoneSolver, QuantifiedMonotoneSolver,
+};
 use biodivine_lib_param_bn::BooleanNetwork;
 use csv::ReaderBuilder;
 use num_rational::BigRational;
 use num_traits::{FromPrimitive, ToPrimitive, Zero};
 use std::collections::BTreeMap;
 use std::fs::File;
-use z3::Model;
 use z3::ast::Dynamic;
 
-fn main() {
+fn main() -> Result<(), anyhow::Error> {
     let args = std::env::args().collect::<Vec<_>>();
     assert_eq!(
         args.len(),
@@ -115,29 +121,33 @@ fn main() {
         );
     }
 
-    let mut inference = InferenceProblem::new(model.clone());
+    let mut inference_problem =
+        InferenceProblem::<DynMonotoneOptimizeSolver>::from_influence_graph(model.as_graph())?;
 
-    let mut states = BTreeMap::new();
     for (cell, spec) in observations.iter() {
-        let state = inference.make_state(cell);
-        states.insert(cell.to_string(), state);
-        inference.assert_state_observation(cell, spec);
-        inference.assert_fixed_point(cell);
+        assert!(inference_problem.declare_state(cell.as_str()));
+        let observation = spec.to_observation();
+        let obs_constraint = StateHasWeightedObservation::new(cell.as_str(), observation);
+        let fix_constraint = StateIsFixedPoint::new(cell.as_str());
+        inference_problem.assert_constraint(obs_constraint)?;
+        inference_problem.assert_constraint(fix_constraint)?;
     }
 
     println!("Starting solver...");
 
-    let solver = if solver_class == "quantified" {
-        inference.build_solver(EncodingMode::Quantified)
+    let mut solver: DynMonotoneOptimizeSolver = if solver_class == "quantified" {
+        Box::new(QuantifiedMonotoneSolver::new(z3::Optimize::new(), true))
     } else {
-        inference.build_solver(EncodingMode::Instantiation)
+        Box::new(InstantiatedMonotoneSolver::new(z3::Optimize::new()))
     };
 
-    let states_copy = states.clone();
-    let observations_copy = observations.clone();
-    solver.register_model_handler(Box::new(move |result| {
+    inference_problem.build_solver(&mut solver)?;
+
+    //let states_copy = states.clone();
+    //let observations_copy = observations.clone();
+    solver.register_model_handler(Box::new(move |_result| {
         println!("Solver made progress!");
-        print_solver_model(result, &states_copy, &observations_copy);
+        //print_solver_model(result, &states_copy, &observations_copy);
     }));
 
     println!("Has solution? {:?}", solver.check());
@@ -147,9 +157,11 @@ fn main() {
         total_weights.to_f64().unwrap()
     );
 
-    if let Some(result) = solver.get_model() {
-        print_solver_model(&result, &states, &observations);
-    }
+    //if let Some(result) = solver.get_model() {
+    //    print_solver_model(&result, &states, &observations);
+    //}
+
+    Ok(())
 }
 
 fn parse_fraction(ast: Dynamic) -> f64 {
@@ -189,34 +201,34 @@ fn strip_monotonicity(model: &mut BooleanNetwork, mut retain: usize) {
     );
 }
 
-fn print_solver_model(
-    model: &Model,
-    states: &BTreeMap<String, SmtState>,
-    observations: &BTreeMap<String, StateSpecification>,
-) {
-    println!("==== Model ====");
-    let mut total_penalty = BigRational::zero();
-    for (cell, state) in states.iter() {
-        print!("\t > Cell: {cell}; ");
-        let req = observations.get(cell).unwrap();
-        let inferred_state = state.extract_state(model);
-        let mut penalty = BigRational::zero();
-        let mut missed = 0;
-        for (var, conf) in req.make_optional_assertion_map() {
-            let actual = inferred_state[var.to_index()];
-            if actual != conf.0 {
-                penalty += &conf.1;
-                missed += 1;
-            }
-        }
-        println!(
-            "Missed: {missed} observations with penalty {}",
-            penalty.to_f64().unwrap()
-        );
-        total_penalty += penalty;
-    }
-    println!("Total penalty: {}", total_penalty.to_f64().unwrap());
-}
+// fn print_solver_model(
+//     model: &Model,
+//     states: &BTreeMap<String, SmtState>,
+//     observations: &BTreeMap<String, StateSpecification>,
+// ) {
+//     println!("==== Model ====");
+//     let mut total_penalty = BigRational::zero();
+//     for (cell, state) in states.iter() {
+//         print!("\t > Cell: {cell}; ");
+//         let req = observations.get(cell).unwrap();
+//         let inferred_state = state.extract_state(model);
+//         let mut penalty = BigRational::zero();
+//         let mut missed = 0;
+//         for (var, conf) in req.make_optional_assertion_map() {
+//             let actual = inferred_state[var.to_index()];
+//             if actual != conf.0 {
+//                 penalty += &conf.1;
+//                 missed += 1;
+//             }
+//         }
+//         println!(
+//             "Missed: {missed} observations with penalty {}",
+//             penalty.to_f64().unwrap()
+//         );
+//         total_penalty += penalty;
+//     }
+//     println!("Total penalty: {}", total_penalty.to_f64().unwrap());
+// }
 
 fn load_table(path: &str) -> (Vec<String>, Vec<String>, Vec<Vec<Option<f64>>>) {
     let file = File::open(path).unwrap();

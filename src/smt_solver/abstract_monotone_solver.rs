@@ -89,3 +89,13 @@ impl AbstractOptimizeSolver for DynMonotoneOptimizeSolver {
         self.as_ref().register_model_handler(callback);
     }
 }
+
+impl AbstractMonotoneSolver for DynMonotoneOptimizeSolver {
+    fn set_monotone(&mut self, f: &FuncDecl, i: usize) -> Result<(), anyhow::Error> {
+        self.as_mut().set_monotone(f, i)
+    }
+
+    fn set_antimonotone(&mut self, f: &FuncDecl, i: usize) -> Result<(), anyhow::Error> {
+        self.as_mut().set_antimonotone(f, i)
+    }
+}
