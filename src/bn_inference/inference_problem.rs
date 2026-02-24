@@ -1,7 +1,7 @@
 use crate::bn_inference::constraints::{RegulatorIsEssential, RegulatorIsMonotone};
 use crate::bn_inference::{InferenceConstraint, InferenceProblemEncoder};
-use crate::smt_solver::AbstractMonotoneSolver;
 use crate::smt_solver::typed_ast::{AstType, TypedAst};
+use crate::smt_solver::{AbstractBoundedIntSolver, AbstractMonotoneBoundedIntSolver};
 use biodivine_lib_param_bn::{Monotonicity, RegulatoryGraph, VariableId};
 use std::collections::BTreeSet;
 use std::ops::{Index, IndexMut};
@@ -31,6 +31,14 @@ pub struct VariableData {
 }
 
 impl VariableData {
+    pub fn is_boolean(&self) -> bool {
+        self.ast_type() == AstType::Bool
+    }
+
+    pub fn is_int(&self) -> bool {
+        self.ast_type() == AstType::Int
+    }
+
     pub fn ast_type(&self) -> AstType {
         if self.domain.0 == 0 && self.domain.1 == 1 {
             AstType::Bool
@@ -171,9 +179,16 @@ impl<SOLVER: 'static> InferenceProblem<SOLVER> {
         self.inference_constraints.push(Box::new(constraint));
         Ok(())
     }
+}
 
-    pub fn build_solver(&self, solver: &mut SOLVER) -> Result<(), anyhow::Error> {
-        let encoder = InferenceProblemEncoder::new(self);
+impl<SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblem<SOLVER> {
+    /// Apply the constraints of this [`InferenceProblem`] into the given compatible solver.
+    ///
+    /// Currently, at least [`AbstractBoundedIntSolver`] is required, since we allow
+    /// usage of bounded `Int` variables. In the future, there may be a variant that only
+    /// supports `Bool` variables and does not need this requirement.
+    pub fn apply_constraints(&self, solver: &mut SOLVER) -> Result<(), anyhow::Error> {
+        let encoder = InferenceProblemEncoder::new(self, solver)?;
         for constraint in self.constraints() {
             constraint.assert_self(&encoder, solver)?;
         }
@@ -181,7 +196,7 @@ impl<SOLVER: 'static> InferenceProblem<SOLVER> {
     }
 }
 
-impl<SOLVER: AbstractMonotoneSolver + 'static> InferenceProblem<SOLVER> {
+impl<SOLVER: AbstractMonotoneBoundedIntSolver + 'static> InferenceProblem<SOLVER> {
     pub fn from_influence_graph(
         rg: &RegulatoryGraph,
     ) -> Result<InferenceProblem<SOLVER>, anyhow::Error> {

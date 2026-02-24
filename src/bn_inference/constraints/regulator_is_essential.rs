@@ -1,6 +1,6 @@
 use crate::bn_inference::constraints::{check_regulator_exists, check_variable_exists};
 use crate::bn_inference::{InferenceConstraint, InferenceProblem, InferenceProblemEncoder};
-use crate::smt_solver::AbstractMonotoneSolver;
+use crate::smt_solver::AbstractBoundedIntSolver;
 use crate::smt_solver::typed_ast::AstType;
 use biodivine_lib_param_bn::VariableId;
 
@@ -15,7 +15,7 @@ impl RegulatorIsEssential {
     }
 }
 
-impl<SOLVER: AbstractMonotoneSolver + 'static> InferenceConstraint<SOLVER>
+impl<SOLVER: AbstractBoundedIntSolver + 'static> InferenceConstraint<SOLVER>
     for RegulatorIsEssential
 {
     /// Ensure that `target` exists and it has the given `regulator`.
@@ -52,6 +52,15 @@ impl<SOLVER: AbstractMonotoneSolver + 'static> InferenceConstraint<SOLVER>
             })
             .collect::<Vec<_>>();
 
+        // Declare the domains of all newly created arguments:
+        for (reg, arg) in target_data.regulators_iter().zip(args.iter()) {
+            let reg_data = &encoder.problem[reg];
+            if reg_data.is_int() {
+                let func = arg.as_dyn_ref().decl();
+                solver.declare_int(&func, Some(reg_data.domain))?;
+            }
+        }
+
         if regulator_data.ast_type() == AstType::Bool {
             // For Boolean arguments, we can simplify the constraint creation process because
             // we know the argument can only be 0/1. This avoids two free variables.
@@ -64,14 +73,22 @@ impl<SOLVER: AbstractMonotoneSolver + 'static> InferenceConstraint<SOLVER>
             let call_args_prime =
                 encoder.mk_update_function_call(self.target, &Vec::from_iter(args.iter()));
             solver.assert(&call_args.eq(&call_args_prime)?.not());
+
+            return Ok(());
+        }
+
+        let arg_prime = regulator_data
+            .ast_type()
+            .new_fresh_const(essential_name.as_str());
+        if regulator_data.is_int() {
+            // If the regulator is `Int`, declare its domain.
+            let func = arg_prime.as_dyn_ref().decl();
+            solver.declare_int(&func, Some(regulator_data.domain))?;
         }
 
         // Assert that `update(args) != update(args[i=i_prime]])`.
         let call_args = encoder.mk_update_function_call(self.target, &Vec::from_iter(args.iter()));
-        let i_prime = regulator_data
-            .ast_type()
-            .new_fresh_const(essential_name.as_str());
-        args[argument_index] = i_prime;
+        args[argument_index] = arg_prime;
         let call_args_prime =
             encoder.mk_update_function_call(self.target, &Vec::from_iter(args.iter()));
         solver.assert(&call_args.eq(&call_args_prime)?.not());

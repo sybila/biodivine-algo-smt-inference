@@ -1,5 +1,6 @@
 use crate::bn_inference::InferenceProblem;
 use crate::smt_solver::typed_ast::{MapDynAst, TypedAst};
+use crate::smt_solver::{AbstractBoundedIntSolver, AbstractSolver};
 use biodivine_lib_param_bn::VariableId;
 use std::collections::BTreeMap;
 use z3::FuncDecl;
@@ -17,13 +18,17 @@ pub struct InferenceProblemEncoder<'a, SOLVER> {
     state_atoms: BTreeMap<String, BTreeMap<VariableId, TypedAst>>,
 }
 
-impl<'a, SOLVER: 'static> InferenceProblemEncoder<'a, SOLVER> {
-    /// Build a new encoder for a given [`InferenceProblem`].
+impl<'a, SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<'a, SOLVER> {
+    /// Build a new encoder for a given [`InferenceProblem`], possibly adding initial assertions
+    /// to the solver.
     ///
     /// Once created, the encoder (and the underlying problem) should effectively remain immutable
     /// to guarantee that the problem and its encoding stay in sync.
-    pub fn new(problem: &'a InferenceProblem<SOLVER>) -> Self {
-        InferenceProblemEncoder {
+    pub fn new(
+        problem: &'a InferenceProblem<SOLVER>,
+        solver: &mut SOLVER,
+    ) -> Result<Self, anyhow::Error> {
+        let encoder = InferenceProblemEncoder {
             update_functions: problem
                 .variables()
                 .map(|var| (var, Self::mk_update_function(problem, var)))
@@ -36,9 +41,32 @@ impl<'a, SOLVER: 'static> InferenceProblemEncoder<'a, SOLVER> {
                 })
                 .collect(),
             problem,
-        }
-    }
+        };
 
+        // Declare domains for known `Int` update functions:
+        for (var, func) in &encoder.update_functions {
+            let var_data = &problem[*var];
+            if var_data.is_int() {
+                solver.declare_int(func, Some(var_data.domain))?;
+            }
+        }
+
+        // Declare domains for known `Int` atoms:
+        for (_state, atoms) in &encoder.state_atoms {
+            for (var, atom) in atoms {
+                let var_data = &problem[*var];
+                if var_data.is_int() {
+                    let func = atom.as_dyn_ref().decl();
+                    solver.declare_int(&func, Some(var_data.domain))?;
+                }
+            }
+        }
+
+        Ok(encoder)
+    }
+}
+
+impl<'a, SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<'a, SOLVER> {
     /// A static helper which creates a declaration for a specific update function within
     /// the given inference problem.
     ///
