@@ -1,16 +1,11 @@
 mod abstract_solver;
 pub use abstract_solver::AbstractSolver;
-pub use abstract_solver::DynAbstractSolver;
 
 mod abstract_optimize_solver;
 pub use abstract_optimize_solver::AbstractOptimizeSolver;
-pub use abstract_optimize_solver::DynOptimizeSolver;
 
 mod abstract_monotone_solver;
-pub use abstract_monotone_solver::AbstractMonotoneOptimizeSolver;
 pub use abstract_monotone_solver::AbstractMonotoneSolver;
-pub use abstract_monotone_solver::DynMonotoneOptimizeSolver;
-pub use abstract_monotone_solver::DynMonotoneSolver;
 pub use abstract_monotone_solver::Monotonicity;
 
 mod abstract_bounded_int_solver;
@@ -24,6 +19,13 @@ pub use instantiated_monotone_solver::InstantiatedMonotoneSolver;
 
 mod bounded_int_solver;
 pub use bounded_int_solver::BoundedIntSolver;
+
+mod abstract_solver_combinations;
+pub use abstract_solver_combinations::*;
+
+mod abstract_solver_dyn;
+pub use abstract_solver_dyn::*;
+
 /// Wrappers that allow us to work with Z3 ASTs restricted to `Bool` and `Int`
 /// types in a slightly more convenient way.
 pub mod typed_ast;

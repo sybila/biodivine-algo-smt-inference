@@ -1,10 +1,10 @@
+use auto_impl::auto_impl;
 use log::trace;
 use z3::ast::Bool;
 use z3::{Model, SatResult};
 
-pub type DynAbstractSolver = Box<dyn AbstractSolver>;
-
 /// The most basic trait implemented by all solvers.
+#[auto_impl(Box)]
 pub trait AbstractSolver {
     fn assert(&mut self, formula: &Bool);
     fn check(&self) -> SatResult;
@@ -38,19 +38,5 @@ impl AbstractSolver for z3::Optimize {
 
     fn get_model(&self) -> Option<Model> {
         z3::Optimize::get_model(self)
-    }
-}
-
-impl AbstractSolver for DynAbstractSolver {
-    fn assert(&mut self, formula: &Bool) {
-        self.as_mut().assert(formula);
-    }
-
-    fn check(&self) -> SatResult {
-        self.as_ref().check()
-    }
-
-    fn get_model(&self) -> Option<Model> {
-        self.as_ref().get_model()
     }
 }
