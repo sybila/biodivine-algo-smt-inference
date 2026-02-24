@@ -197,21 +197,32 @@ impl<SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblem<SOLVER> {
 }
 
 impl<SOLVER: AbstractMonotoneBoundedIntSolver + 'static> InferenceProblem<SOLVER> {
+    /// Completely initialize the [`InferenceProblem`] from the given [`RegulatoryGraph`],
+    /// declaring all variables as Boolean and using their declared regulations.
     pub fn from_influence_graph(
         rg: &RegulatoryGraph,
     ) -> Result<InferenceProblem<SOLVER>, anyhow::Error> {
         let mut inference_problem = InferenceProblem::new();
+
         // Declare all variables:
         for var in rg.variables() {
             let var_p = inference_problem.declare_variable(rg.get_variable_name(var), (0, 1));
             assert_eq!(var_p, var);
         }
 
+        inference_problem.initialize_regulations(rg)?;
+        Ok(inference_problem)
+    }
+
+    /// Initialize regulations between variables based on the provided [`RegulatoryGraph`],
+    /// assuming all variables are already declared.
+    ///
+    /// This can be used as a helper function when you want to use a specific graph, but want
+    /// to override variable domains.
+    pub fn initialize_regulations(&mut self, rg: &RegulatoryGraph) -> Result<(), anyhow::Error> {
         // Declare all regulations:
         for reg in rg.regulations() {
-            inference_problem[reg.target]
-                .regulators
-                .insert(reg.regulator);
+            self[reg.target].regulators.insert(reg.regulator);
         }
 
         // Declare all monotonic inputs (these need to go first):
@@ -222,7 +233,7 @@ impl<SOLVER: AbstractMonotoneBoundedIntSolver + 'static> InferenceProblem<SOLVER
                     reg.regulator,
                     monotonicity == Monotonicity::Activation,
                 );
-                inference_problem.assert_constraint(constraint)?;
+                self.assert_constraint(constraint)?;
             }
         }
 
@@ -230,10 +241,10 @@ impl<SOLVER: AbstractMonotoneBoundedIntSolver + 'static> InferenceProblem<SOLVER
         for reg in rg.regulations() {
             if reg.observable {
                 let constraint = RegulatorIsEssential::new(reg.target, reg.regulator);
-                inference_problem.assert_constraint(constraint)?;
+                self.assert_constraint(constraint)?;
             }
         }
 
-        Ok(inference_problem)
+        Ok(())
     }
 }

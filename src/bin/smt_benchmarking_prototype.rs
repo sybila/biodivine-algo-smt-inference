@@ -3,9 +3,9 @@ use biodivine_algo_smt_inference::bn_inference::constraints::{
     StateHasExactObservation, StateIsFixedPoint, StateObservation,
 };
 use biodivine_algo_smt_inference::smt_solver::{
-    DynMonotoneSolver, InstantiatedMonotoneSolver, QuantifiedMonotoneSolver,
+    AbstractSolver, BoundedIntSolver, DynMonotoneBoundedIntSolver, InstantiatedMonotoneSolver,
+    QuantifiedMonotoneSolver,
 };
-use biodivine_algo_smt_inference::{Dataset, Observation};
 use biodivine_lib_param_bn::{BooleanNetwork, ModelAnnotation};
 use clap::Parser;
 use clap::builder::PossibleValuesParser;
@@ -49,35 +49,49 @@ fn main() -> Result<(), anyhow::Error> {
             let json_str = fp_values.value().expect("Missing annotation value");
             let map: BTreeMap<String, u32> =
                 serde_json::from_str(json_str).expect("Failed to parse fixed-point string as JSON");
-            let map = map.into_iter().map(|(k, v)| (k, v > 0)).collect();
-            observations.insert(fp_id.to_string(), Observation::from_value_map(map));
+            observations.insert(fp_id.to_string(), map);
         }
     }
-    let dataset = Dataset::new(observations);
-
-    // Use data as hard constraints
-    let inference = dataset.to_inference_problem(&psbn, None).unwrap();
 
     if args.verbose {
         println!("Building solver using `{}` encoding..", args.solver);
     }
 
-    let mut inference_problem =
-        InferenceProblem::<DynMonotoneSolver>::from_influence_graph(psbn.as_graph())?;
-    let mut solver: DynMonotoneSolver = match args.solver.as_str() {
-        "quantified" => Box::new(QuantifiedMonotoneSolver::new(z3::Solver::new(), false)),
-        "quantified-optimized" => Box::new(QuantifiedMonotoneSolver::new(z3::Solver::new(), true)),
-        "instantiation" => Box::new(InstantiatedMonotoneSolver::new(z3::Solver::new())),
+    let mut inference_problem = InferenceProblem::<DynMonotoneBoundedIntSolver>::new();
+    let inner_solver = BoundedIntSolver::new_strict(z3::Solver::new());
+    let mut solver: DynMonotoneBoundedIntSolver = match args.solver.as_str() {
+        "quantified" => Box::new(QuantifiedMonotoneSolver::new(inner_solver, false)),
+        "quantified-optimized" => Box::new(QuantifiedMonotoneSolver::new(inner_solver, true)),
+        "instantiation" => Box::new(InstantiatedMonotoneSolver::new(inner_solver)),
         _ => panic!("Unknown solver: {}", args.solver),
     };
 
+    // We have to explicitly initialize the inference problem with influence graph constraints
+    // to make sure the variable domains are correctly included.
+
+    // Declare all variables:
+    for var in psbn.variables() {
+        let name = psbn.get_variable_name(var);
+        let max_value = annotations
+            .get_value(&["variable", name, "max_value"])
+            .map(|it| it.parse::<u32>().unwrap())
+            .unwrap_or(1);
+        let var_p = inference_problem.declare_variable(name.as_str(), (0, max_value));
+        assert_eq!(var_p, var);
+    }
+
+    inference_problem.initialize_regulations(psbn.as_graph())?;
+
     // Declare all fixed-points:
-    for (name, observation) in dataset.observations {
+    for (name, observation) in observations {
         assert!(inference_problem.declare_state(name.as_str()));
-        let observation = observation
-            .value_map
-            .iter()
-            .map(|(k, v)| (inference_problem.find_variable(k).unwrap(), u32::from(*v)))
+        let observation = psbn
+            .variables()
+            .filter_map(|var| {
+                observation
+                    .get(psbn.get_variable_name(var))
+                    .map(|it| (var, *it))
+            })
             .collect::<Vec<_>>();
         let observation = StateObservation::from_exact(observation);
         let obs_constraint = StateHasExactObservation::new(name.as_str(), observation);
@@ -86,7 +100,7 @@ fn main() -> Result<(), anyhow::Error> {
         inference_problem.assert_constraint(fix_constraint)?;
     }
 
-    inference_problem.build_solver(&mut solver)?;
+    inference_problem.apply_constraints(&mut solver)?;
 
     if args.verbose {
         println!("Checking for solution...");
@@ -99,22 +113,25 @@ fn main() -> Result<(), anyhow::Error> {
         println!("{}", res);
     }
 
-    // If we have a model and an output path was given, save it
-    if result == SatResult::Sat
-        && let Some(output_path) = args.output_path
-    {
-        let model = solver.get_model().unwrap();
-        println!("{:?}", model);
-        if args.verbose {
-            println!("Saving BN at: {output_path}");
-        }
+    println!("{:?}", solver.get_model());
 
-        // Reconstruct the BN instance using the functions extracted from the z3 model
-        // This works well as long as all update functions are just an uninterpreted
-        // function applied to variable's regulators.
-        let bn_instance = inference.extract_bn_instance_simplified(&model);
-        std::fs::write(output_path, bn_instance.to_string())?;
-    }
+    // TODO: Restore this functionality:
+    // // If we have a model and an output path was given, save it
+    // if result == SatResult::Sat
+    //     && let Some(output_path) = args.output_path
+    // {
+    //     let model = solver.get_model().unwrap();
+    //     println!("{:?}", model);
+    //     if args.verbose {
+    //         println!("Saving BN at: {output_path}");
+    //     }
+    //
+    //     // Reconstruct the BN instance using the functions extracted from the z3 model
+    //     // This works well as long as all update functions are just an uninterpreted
+    //     // function applied to variable's regulators.
+    //     let bn_instance = inference.extract_bn_instance_simplified(&model);
+    //     std::fs::write(output_path, bn_instance.to_string())?;
+    // }
 
     Ok(())
 }

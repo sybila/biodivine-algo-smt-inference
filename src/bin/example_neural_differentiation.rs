@@ -4,7 +4,8 @@ use biodivine_algo_smt_inference::bn_inference::constraints::{
     StateHasWeightedObservation, StateIsFixedPoint,
 };
 use biodivine_algo_smt_inference::smt_solver::{
-    AbstractSolver, DynMonotoneOptimizeSolver, InstantiatedMonotoneSolver, QuantifiedMonotoneSolver,
+    AbstractSolver, BoundedIntSolver, DynMonotoneBoundedIntOptimizeSolver,
+    InstantiatedMonotoneSolver, QuantifiedMonotoneSolver,
 };
 use biodivine_lib_param_bn::BooleanNetwork;
 use csv::ReaderBuilder;
@@ -123,7 +124,9 @@ fn main() -> Result<(), anyhow::Error> {
     }
 
     let mut inference_problem =
-        InferenceProblem::<DynMonotoneOptimizeSolver>::from_influence_graph(model.as_graph())?;
+        InferenceProblem::<DynMonotoneBoundedIntOptimizeSolver>::from_influence_graph(
+            model.as_graph(),
+        )?;
 
     for (cell, spec) in observations.iter() {
         assert!(inference_problem.declare_state(cell.as_str()));
@@ -136,13 +139,14 @@ fn main() -> Result<(), anyhow::Error> {
 
     println!("Starting solver...");
 
-    let mut solver: DynMonotoneOptimizeSolver = if solver_class == "quantified" {
-        Box::new(QuantifiedMonotoneSolver::new(z3::Optimize::new(), true))
+    let inner_solver = BoundedIntSolver::new_strict(z3::Optimize::new());
+    let mut solver: DynMonotoneBoundedIntOptimizeSolver = if solver_class == "quantified" {
+        Box::new(QuantifiedMonotoneSolver::new(inner_solver, true))
     } else {
-        Box::new(InstantiatedMonotoneSolver::new(z3::Optimize::new()))
+        Box::new(InstantiatedMonotoneSolver::new(inner_solver))
     };
 
-    inference_problem.build_solver(&mut solver)?;
+    inference_problem.apply_constraints(&mut solver)?;
 
     //let states_copy = states.clone();
     //let observations_copy = observations.clone();
