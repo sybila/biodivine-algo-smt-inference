@@ -1,8 +1,8 @@
 use crate::bn_inference::constraints::{check_regulator_exists, check_variable_exists};
 use crate::bn_inference::{InferenceConstraint, InferenceProblem, InferenceProblemEncoder};
 use crate::smt_solver::AbstractMonotoneSolver;
-use anyhow::Error;
 use biodivine_lib_param_bn::VariableId;
+use log::info;
 
 pub struct RegulatorIsMonotone {
     target: VariableId,
@@ -30,7 +30,7 @@ impl RegulatorIsMonotone {
 
 impl<SOLVER: AbstractMonotoneSolver + 'static> InferenceConstraint<SOLVER> for RegulatorIsMonotone {
     /// Ensure that `target` exists and it has the given `regulator`.
-    fn validate(&self, problem: &InferenceProblem<SOLVER>) -> Result<(), Error> {
+    fn validate(&self, problem: &InferenceProblem<SOLVER>) -> Result<(), anyhow::Error> {
         check_variable_exists(problem, self.target)?;
         check_regulator_exists(problem, self.target, self.regulator)?;
         Ok(())
@@ -41,6 +41,10 @@ impl<SOLVER: AbstractMonotoneSolver + 'static> InferenceConstraint<SOLVER> for R
         encoder: &InferenceProblemEncoder<SOLVER>,
         solver: &mut SOLVER,
     ) -> Result<(), anyhow::Error> {
+        info!(
+            "Asserting: regulator `{:?}` is monotone (is_positive={}) in target `{:?}`.",
+            self.regulator, self.is_positive, self.target
+        );
         let function = encoder.update_function(self.target);
         let argument = encoder.problem[self.target]
             .regulator_index(self.regulator)

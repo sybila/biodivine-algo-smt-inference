@@ -3,6 +3,7 @@ use crate::bn_inference::{InferenceConstraint, InferenceProblem, InferenceProble
 use crate::smt_solver::{AbstractOptimizeSolver, AbstractSolver};
 use anyhow::Error;
 use biodivine_lib_param_bn::VariableId;
+use log::{debug, info};
 use num_rational::BigRational;
 use std::collections::BTreeMap;
 
@@ -29,6 +30,10 @@ impl StateObservation {
         StateObservation {
             values: values.into_iter().collect(),
         }
+    }
+
+    pub fn size(&self) -> usize {
+        self.values.len()
     }
 
     /// Iterator over all observed values.
@@ -66,6 +71,14 @@ impl StateHasExactObservation {
             observation,
         }
     }
+
+    pub fn state(&self) -> &str {
+        &self.state
+    }
+
+    pub fn observation(&self) -> &StateObservation {
+        &self.observation
+    }
 }
 
 impl StateHasWeightedObservation {
@@ -74,6 +87,14 @@ impl StateHasWeightedObservation {
             state: state.to_string(),
             observation,
         }
+    }
+
+    pub fn state(&self) -> &str {
+        &self.state
+    }
+
+    pub fn observation(&self) -> &StateObservation {
+        &self.observation
     }
 }
 
@@ -91,9 +112,14 @@ impl<SOLVER: AbstractSolver + 'static> InferenceConstraint<SOLVER> for StateHasE
         solver: &mut SOLVER,
     ) -> Result<(), Error> {
         // Assert that all state atoms have the values they are expected to have.
+        info!("Asserting: state `{}` has exact observation.", self.state);
         for (variable, observation) in self.observation.observations() {
             let atom = encoder.state_atom(&self.state, variable);
             let value = encoder.problem[variable].ast_type().new_value(observation);
+            debug!(
+                "Asserting: `{variable:?}` is fixed to `{value}` by observation in state `{}`.",
+                self.state
+            );
             solver.assert(&atom.eq(&value)?);
         }
         Ok(())
@@ -116,12 +142,24 @@ impl<SOLVER: AbstractOptimizeSolver + 'static> InferenceConstraint<SOLVER>
     ) -> Result<(), Error> {
         // Assert that all state atoms have the values they are expected to have. Treat observations
         // without coefficients as hard constraints.
+        info!(
+            "Asserting: state `{}` has weighted observation.",
+            self.state
+        );
         for (variable, observation, weight) in self.observation.weighted_observations() {
             let atom = encoder.state_atom(&self.state, variable);
             let value = encoder.problem[variable].ast_type().new_value(observation);
             if let Some(weight) = weight {
+                debug!(
+                    "Asserting: `{variable:?}` is fixed to `{value}` with weight {weight} by observation in state `{}`.",
+                    self.state
+                );
                 solver.assert_soft(&atom.eq(&value)?, weight);
             } else {
+                debug!(
+                    "Asserting: `{variable:?}` is fixed to `{value}` by observation in state `{}`.",
+                    self.state
+                );
                 solver.assert(&atom.eq(&value)?);
             }
         }

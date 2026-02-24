@@ -4,6 +4,7 @@ use crate::smt_solver::{
     Monotonicity, extract_function_applications, extract_function_type_signature,
 };
 use anyhow::anyhow;
+use log::debug;
 use num_rational::BigRational;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use z3::ast::{Ast, Bool, Dynamic};
@@ -161,6 +162,10 @@ impl<INNER: AbstractSolver> InstantiatedMonotoneSolver<INNER> {
             }
 
             for other_app in info.occurrences.iter() {
+                debug!(
+                    "Asserting: Monotonicity lemma for {} and {}.",
+                    app, other_app
+                );
                 if let Some(lemma) = info.mk_monotonicity_lemma(&app, other_app) {
                     self.inner.assert(&lemma);
                     info.lemmas.push(lemma);

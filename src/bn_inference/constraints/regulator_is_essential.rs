@@ -3,6 +3,7 @@ use crate::bn_inference::{InferenceConstraint, InferenceProblem, InferenceProble
 use crate::smt_solver::AbstractBoundedIntSolver;
 use crate::smt_solver::typed_ast::AstType;
 use biodivine_lib_param_bn::VariableId;
+use log::info;
 
 pub struct RegulatorIsEssential {
     target: VariableId,
@@ -30,6 +31,10 @@ impl<SOLVER: AbstractBoundedIntSolver + 'static> InferenceConstraint<SOLVER>
         encoder: &InferenceProblemEncoder<SOLVER>,
         solver: &mut SOLVER,
     ) -> Result<(), anyhow::Error> {
+        info!(
+            "Asserting: regulator `{:?}` is essential in target `{:?}`.",
+            self.regulator, self.target
+        );
         let target_data = &encoder.problem[self.target];
         let regulator_data = &encoder.problem[self.regulator];
         let argument_index = encoder.problem[self.target]
