@@ -187,8 +187,15 @@ impl<SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblem<SOLVER> {
     /// Currently, at least [`AbstractBoundedIntSolver`] is required, since we allow
     /// usage of bounded `Int` variables. In the future, there may be a variant that only
     /// supports `Bool` variables and does not need this requirement.
-    pub fn apply_constraints(&self, solver: &mut SOLVER) -> Result<(), anyhow::Error> {
-        let encoder = InferenceProblemEncoder::new(self, solver)?;
+    ///
+    /// If `propagate_observations` is set to `true`, the encoder will try to inline known
+    /// values of atoms that are fully determined by observations.
+    pub fn apply_constraints(
+        &self,
+        solver: &mut SOLVER,
+        propagate_observations: bool,
+    ) -> Result<(), anyhow::Error> {
+        let encoder = InferenceProblemEncoder::new(self, solver, propagate_observations)?;
         for constraint in self.constraints() {
             constraint.assert_self(&encoder, solver)?;
         }

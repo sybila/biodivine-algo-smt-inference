@@ -26,6 +26,9 @@ struct Arguments {
     #[clap(short, long)]
     verbose: bool,
 
+    #[clap(short, long, default_value = "false")]
+    propagate_observations: bool,
+
     /// Optional path to save the resulting sat BN instance.
     #[clap(short, long)]
     output_path: Option<String>,
@@ -100,7 +103,9 @@ fn main() -> Result<(), anyhow::Error> {
         inference_problem.assert_constraint(fix_constraint)?;
     }
 
-    inference_problem.apply_constraints(&mut solver)?;
+    println!("Inference problem initialized. Creating constraints.");
+
+    inference_problem.apply_constraints(&mut solver, args.propagate_observations)?;
 
     if args.verbose {
         println!("Checking for solution...");

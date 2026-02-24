@@ -146,7 +146,7 @@ fn main() -> Result<(), anyhow::Error> {
         Box::new(InstantiatedMonotoneSolver::new(inner_solver))
     };
 
-    inference_problem.apply_constraints(&mut solver)?;
+    inference_problem.apply_constraints(&mut solver, true)?;
 
     //let states_copy = states.clone();
     //let observations_copy = observations.clone();

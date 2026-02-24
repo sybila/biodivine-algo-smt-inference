@@ -1,7 +1,9 @@
 use crate::bn_inference::InferenceProblem;
+use crate::bn_inference::constraints::StateHasExactObservation;
 use crate::smt_solver::typed_ast::{MapDynAst, TypedAst};
 use crate::smt_solver::{AbstractBoundedIntSolver, AbstractSolver};
 use biodivine_lib_param_bn::VariableId;
+use log::info;
 use std::collections::BTreeMap;
 use z3::FuncDecl;
 
@@ -24,11 +26,15 @@ impl<'a, SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<'a,
     ///
     /// Once created, the encoder (and the underlying problem) should effectively remain immutable
     /// to guarantee that the problem and its encoding stay in sync.
+    ///
+    /// If `propagate_observations` is set to `true`, the encoder will try to inline known
+    /// values of atoms that are fully determined by observations.
     pub fn new(
         problem: &'a InferenceProblem<SOLVER>,
         solver: &mut SOLVER,
+        propagate_observations: bool,
     ) -> Result<Self, anyhow::Error> {
-        let encoder = InferenceProblemEncoder {
+        let mut encoder = InferenceProblemEncoder {
             update_functions: problem
                 .variables()
                 .map(|var| (var, Self::mk_update_function(problem, var)))
@@ -42,6 +48,31 @@ impl<'a, SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<'a,
                 .collect(),
             problem,
         };
+
+        if propagate_observations {
+            // TODO: Currently, this ignores hard constraints in weighted observations.
+            // For each state, find observations that reason about this state. In these observations,
+            // detect exact observations and use those to replace current free atoms with known
+            // state values.
+            for constraint in problem.constraints() {
+                if let Some(constraint) = constraint.downcast_ref::<StateHasExactObservation>() {
+                    let atoms = encoder
+                        .state_atoms
+                        .get_mut(constraint.state())
+                        .expect("Unreachable: State must exist.");
+                    for (var, val) in constraint.observation().observations() {
+                        let val_const = problem[var].ast_type().new_value(val);
+                        atoms.insert(var, val_const);
+                    }
+                    info!(
+                        "Propagated {}/{} atoms for state {}.",
+                        constraint.observation().size(),
+                        atoms.len(),
+                        constraint.state()
+                    );
+                }
+            }
+        }
 
         // Declare domains for known `Int` update functions:
         for (var, func) in &encoder.update_functions {
