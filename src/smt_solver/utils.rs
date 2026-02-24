@@ -1,11 +1,13 @@
 use crate::smt_solver::typed_ast::AstType;
 use anyhow::anyhow;
 use std::collections::HashSet;
-use z3::ast::{Ast, Bool, Dynamic};
+use z3::ast::{Ast, Bool, Dynamic, Int};
 use z3::{DeclKind, FuncDecl};
 
 /// Extract all uninterpreted function applications from the given expression. The expression is
 /// only allowed to use `Int` and `Bool` functions.
+///
+/// TODO: For now, this is ignoring usages that appear inside quantifiers...
 pub fn extract_function_applications(fml: &Bool) -> HashSet<Dynamic> {
     let mut todo = vec![Dynamic::from_ast(fml)];
     let mut results: HashSet<Dynamic> = HashSet::new();
@@ -14,10 +16,12 @@ pub fn extract_function_applications(fml: &Bool) -> HashSet<Dynamic> {
     while let Some(expr) = todo.pop() {
         // Regardless of expression type, we want to explore all child expressions, assuming
         // we have not seen them before.
-        for child in expr.children() {
-            if !seen.contains(&child) {
-                seen.insert(child.clone());
-                todo.push(child);
+        if expr.is_app() {
+            for child in expr.children() {
+                if !seen.contains(&child) {
+                    seen.insert(child.clone());
+                    todo.push(child);
+                }
             }
         }
 
@@ -26,6 +30,36 @@ pub fn extract_function_applications(fml: &Bool) -> HashSet<Dynamic> {
         if expr.num_children() > 0 && expr.is_app() && expr.decl().kind() == DeclKind::UNINTERPRETED
         {
             results.insert(expr.clone());
+        }
+    }
+
+    results
+}
+
+/// Extract all uninterpreted function usages (including zero-arity constants) of type `Int`.
+///
+/// TODO: For now, this is ignoring usages that appear inside quantifiers...
+pub fn extract_int_functions(fml: &Bool) -> HashSet<Int> {
+    let mut todo = vec![Dynamic::from_ast(fml)];
+    let mut results: HashSet<Int> = HashSet::new();
+    let mut seen: HashSet<Dynamic> = HashSet::new();
+
+    while let Some(expr) = todo.pop() {
+        // Same as `extract_function_applications`, we want to explore all child expressions.
+        if expr.is_app() {
+            for child in expr.children() {
+                if !seen.contains(&child) {
+                    seen.insert(child.clone());
+                    todo.push(child);
+                }
+            }
+        }
+
+        // Check if the expression is an uninterpreted function application and has type `Int`:
+        if expr.is_app() && expr.decl().kind() == DeclKind::UNINTERPRETED {
+            if let Some(expr) = expr.as_int() {
+                results.insert(expr);
+            }
         }
     }
 

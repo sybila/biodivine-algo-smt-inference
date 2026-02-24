@@ -1,6 +1,7 @@
 use crate::smt_solver::typed_ast::{AstType, MapDynAst, TypedAst};
 use crate::smt_solver::{
-    AbstractMonotoneSolver, AbstractOptimizeSolver, AbstractSolver, extract_function_type_signature,
+    AbstractBoundedIntSolver, AbstractMonotoneSolver, AbstractOptimizeSolver, AbstractSolver,
+    extract_function_type_signature,
 };
 use anyhow::anyhow;
 use num_rational::BigRational;
@@ -170,5 +171,15 @@ impl<INNER: AbstractOptimizeSolver> AbstractOptimizeSolver for QuantifiedMonoton
 
     fn register_model_handler(&self, callback: Box<dyn Fn(&Model)>) {
         self.inner.register_model_handler(callback);
+    }
+}
+
+impl<INNER: AbstractBoundedIntSolver> AbstractBoundedIntSolver for QuantifiedMonotoneSolver<INNER> {
+    fn declare_int(
+        &mut self,
+        f: &FuncDecl,
+        domain: Option<(u32, u32)>,
+    ) -> Result<(), anyhow::Error> {
+        self.inner.declare_int(f, domain)
     }
 }
