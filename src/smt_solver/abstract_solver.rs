@@ -1,3 +1,4 @@
+use log::trace;
 use z3::ast::Bool;
 use z3::{Model, SatResult};
 
@@ -12,6 +13,7 @@ pub trait AbstractSolver {
 
 impl AbstractSolver for z3::Solver {
     fn assert(&mut self, formula: &Bool) {
+        trace!("[assert] {}", formula);
         z3::Solver::assert(self, formula);
     }
 
@@ -26,6 +28,7 @@ impl AbstractSolver for z3::Solver {
 
 impl AbstractSolver for z3::Optimize {
     fn assert(&mut self, formula: &Bool) {
+        trace!("[assert-optimize] {}", formula);
         z3::Optimize::assert(self, formula);
     }
 

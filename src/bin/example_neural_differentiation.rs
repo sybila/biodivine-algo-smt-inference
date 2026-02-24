@@ -15,6 +15,7 @@ use std::fs::File;
 use z3::ast::Dynamic;
 
 fn main() -> Result<(), anyhow::Error> {
+    env_logger::init();
     let args = std::env::args().collect::<Vec<_>>();
     assert_eq!(
         args.len(),

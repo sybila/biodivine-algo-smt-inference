@@ -1,4 +1,5 @@
 use crate::smt_solver::AbstractSolver;
+use log::trace;
 use num_rational::BigRational;
 use z3::ast::{Bool, Dynamic};
 use z3::{Model, SatResult};
@@ -15,6 +16,7 @@ pub trait AbstractOptimizeSolver: AbstractSolver {
 
 impl AbstractOptimizeSolver for z3::Optimize {
     fn assert_soft(&mut self, formula: &Bool, weight: BigRational) {
+        trace!("[assert-soft][{}] {}", weight, formula);
         z3::Optimize::assert_soft(self, formula, weight, None)
     }
 

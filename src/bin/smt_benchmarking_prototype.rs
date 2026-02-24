@@ -32,6 +32,7 @@ struct Arguments {
 }
 
 fn main() -> Result<(), anyhow::Error> {
+    env_logger::init();
     let args = Arguments::parse();
 
     let model_string = std::fs::read_to_string(&args.model_path)?;
