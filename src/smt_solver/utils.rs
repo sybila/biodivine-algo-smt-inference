@@ -56,10 +56,11 @@ pub fn extract_int_functions(fml: &Bool) -> HashSet<Int> {
         }
 
         // Check if the expression is an uninterpreted function application and has type `Int`:
-        if expr.is_app() && expr.decl().kind() == DeclKind::UNINTERPRETED {
-            if let Some(expr) = expr.as_int() {
-                results.insert(expr);
-            }
+        if expr.is_app()
+            && expr.decl().kind() == DeclKind::UNINTERPRETED
+            && let Some(expr) = expr.as_int()
+        {
+            results.insert(expr);
         }
     }
 

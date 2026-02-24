@@ -44,14 +44,15 @@ impl<SOLVER: AbstractSolver> BoundedIntSolver<SOLVER> {
             if domain.is_none() && !self.allow_undeclared {
                 // Undeclared and user requested this to be an error.
                 panic!("Cannot use undeclared `Int` function `{}`.", name);
-            } else if let Some(domain) = domain {
-                if let Some((min, max)) = domain {
-                    self.inner
-                        .assert(&int_function.le(&Int::from_u64(u64::from(*max))));
-                    self.inner
-                        .assert(&int_function.ge(&Int::from_u64(u64::from(*min))));
-                } // else: The function is declared but unbounded.
-            } // Undeclared functions are otherwise skipped.
+            } else if let Some(domain) = domain
+                && let Some((min, max)) = domain
+            {
+                self.inner
+                    .assert(&int_function.le(Int::from_u64(u64::from(*max))));
+                self.inner
+                    .assert(&int_function.ge(Int::from_u64(u64::from(*min))));
+            } // else: The function is declared but unbounded.
+            // Undeclared functions are otherwise skipped.
         }
     }
 }

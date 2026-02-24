@@ -83,7 +83,7 @@ impl<'a, SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<'a,
         }
 
         // Declare domains for known `Int` atoms:
-        for (_state, atoms) in &encoder.state_atoms {
+        for atoms in encoder.state_atoms.values() {
             for (var, atom) in atoms {
                 let var_data = &problem[*var];
                 if var_data.is_int() {
