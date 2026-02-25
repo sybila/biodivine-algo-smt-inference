@@ -111,14 +111,22 @@ fn main() {
                 let update_fn = psbn.get_update_function(variable).clone().unwrap();
                 if let FnUpdate::Param(_, fn_args) = update_fn {
                     let uninterpreted_fn_id = format!("f_{var_name}"); // id in SMT encoding
-                    let fn_dnf_str = monotone_fn_map.get(&uninterpreted_fn_id).unwrap();
-
-                    // We need to substitute variable names in the fn expression string (x_0, x_1,..)
-                    // with the actual function arguments
-                    let update = substitute_fn_args(fn_dnf_str, fn_args, psbn);
-                    bn_instance
-                        .set_update_function(variable, Some(update))
-                        .unwrap();
+                    if let Some(fn_dnf_str) = monotone_fn_map.get(&uninterpreted_fn_id) {
+                        // If the map contains the expression, use it
+                        // We just need to substitute variable names in the fn expression string 
+                        // (x_0, x_1,..) with the actual function arguments
+                        let update = substitute_fn_args(fn_dnf_str, &fn_args, psbn, "x_");
+                        bn_instance
+                            .set_update_function(variable, Some(update))
+                            .unwrap();
+                    } else {
+                        // If the function is not part of the map, it means there were no constraints
+                        // placed on it at all, and we can just make it constant.
+                        let constant_update = FnUpdate::mk_false();
+                        bn_instance
+                            .set_update_function(variable, Some(constant_update))
+                            .unwrap();
+                    }
                 } else {
                     panic!("Unexpected update fn format.");
                 }

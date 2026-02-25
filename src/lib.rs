@@ -234,7 +234,7 @@ impl InferenceProblem {
 
                 // We need to substitute variable names in the BDD expression string (x_0, x_1,..)
                 // with the actual function arguments
-                let update = substitute_fn_args(&bdd_string, args, psbn);
+                let update = substitute_fn_args(&bdd_string, &args, psbn, "x_");
                 bn_instance
                     .set_update_function(variable, Some(update))
                     .unwrap();
@@ -466,33 +466,97 @@ impl InferenceProblem {
     }
 }
 
-/// Given a general expression of a previously unintepreted function, substitute all formal
-/// args (xxxxx_0, xxxxx_1, ..) with the actual arguments that the function is applied to (in the
-/// BN's update).
+/// Given a concrete expression of a previously unintepreted function, substitute all 
+/// formal args with the actual arguments that the function is applied to (e.g., in some of
+/// the BN's update functions). The formal arguments variables must be named in a standardized
+/// way - <prefix>1, <prefix>2,... This prefix (such as `x_` or `var_`) is provided using the
+/// `var_prefix` argument.
 ///
-/// Return a new FnUpdate instance for the expression, with substituted variable names.
-///
-/// WARNING: Since we now only use simple string rewriting, this can break if BN variables
-/// contain "xxxxx_N" substrings.
+/// Returns a new FnUpdate instance for the expression, with substituted variable names.
+/// 
+/// TODO: not too efficient, but should only be run once for each function at the end.
 pub fn substitute_fn_args(
     expression: &str,
-    applied_args: Vec<FnUpdate>,
+    applied_args: &[FnUpdate],
     psbn: &BooleanNetwork,
+    var_prefix: &str,
 ) -> FnUpdate {
-    // Compute rename mapping between formal and actual arguments
-    let mut renaming = BTreeMap::new();
-    for (i, arg) in applied_args.iter().enumerate() {
-        assert!(matches!(arg, FnUpdate::Var(_)));
-        renaming.insert(format!("xxxxx_{}", i), format!("({})", arg.to_string(psbn)));
+    let mut modified_expression = expression.to_string();
+    
+    // We'll do this in two steps to avoid clashes between formal and actual argument names.
+    // First replace the vars with placeholders which cant appear in any variable names
+    let mut formal_keys: Vec<String> = (0..applied_args.len())
+        .map(|i| format!("{var_prefix}{}", i)) 
+        .collect();
+    // Sort by length to ensure x_10 is replaced before x_1
+    formal_keys.sort_by_key(|k| std::cmp::Reverse(k.len()));  
+
+    for key in &formal_keys {
+        let index_str = &key[var_prefix.len()..]; // get index ("x_10" -> "10")
+        // Use a placeholder that DOES NOT contain the prefix (e.g., #10#)
+        let placeholder = format!("#{}#", index_str);        
+        modified_expression = modified_expression.replace(key, &placeholder);
     }
 
-    // Sort by len, since this is just string pattern matching substitution
-    let mut keys: Vec<_> = renaming.keys().cloned().collect();
-    keys.sort_by_key(|k| std::cmp::Reverse(k.len()));
-    let mut modified_expression = expression.to_string();
-    for key in keys {
-        modified_expression = modified_expression.replace(&key, &renaming[&key]);
+    // Now replace placeholders with actual variable names
+    for (i, arg) in applied_args.iter().enumerate() {
+        assert!(matches!(arg, FnUpdate::Var(_)));
+        let placeholder = format!("#{}#", i);
+        let actual_arg = format!("({})", arg.to_string(psbn));
+        modified_expression = modified_expression.replace(&placeholder, &actual_arg);
     }
 
     FnUpdate::try_from_str(&modified_expression, psbn).unwrap()
+}
+
+#[cfg(test)]
+mod unit_tests {
+    use biodivine_lib_param_bn::BooleanNetwork;
+    use crate::substitute_fn_args;
+
+    #[test]
+    /// Test substituting function arguments.
+    fn test_substitute_vars() {
+        // Random expression with three variables for and BN with a corresponding
+        // three-variable update function.
+        let expression = "(x_0 & x_1 & !x_2) | (!x_0 & x_1)";
+        let bn = BooleanNetwork::try_from(
+            r#"
+            a -?? c
+            b -?? c
+            c -?? c
+            $a: true
+            $b: true
+            $c: f(a, b, c)
+            "#,
+        )
+        .unwrap();
+        
+        let var_c = bn.as_graph().find_variable("c").unwrap();
+        let (_, arguments) = bn.get_update_function(var_c).as_ref().unwrap().as_param().unwrap();
+        let modified_fn_tree = substitute_fn_args(expression, arguments, &bn, "x_");
+        assert_eq!(modified_fn_tree.to_string(&bn), "(a & b & !c) | (!a & b)");
+    }
+
+    #[test]
+    /// Test substituting function arguments into variables with colliding names.
+    fn test_substitute_vars_colliding() {
+        // Random expression with three variables for and BN with a corresponding
+        // three-variable update function.
+        let expression = "(x_0 & x_1) | !x_0";
+        let bn = BooleanNetwork::try_from(
+            r#"
+            x_1a -?? x_1b
+            x_1b -?? x_1b
+            $x_1a: true
+            $x_1b: f(x_1a, x_1b)
+            "#,
+        )
+        .unwrap();
+        
+        let variable = bn.as_graph().find_variable("x_1b").unwrap();
+        let (_, arguments) = bn.get_update_function(variable).as_ref().unwrap().as_param().unwrap();
+        let modified_fn_tree = substitute_fn_args(expression, arguments, &bn, "x_");
+        assert_eq!(modified_fn_tree.to_string(&bn), "(x_1a & x_1b) | !x_1a");
+    }
 }
