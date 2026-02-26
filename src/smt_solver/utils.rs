@@ -2,7 +2,7 @@ use crate::smt_solver::typed_ast::AstType;
 use anyhow::anyhow;
 use std::collections::HashSet;
 use z3::ast::{Ast, Bool, Dynamic, Int};
-use z3::{DeclKind, FuncDecl};
+use z3::{DeclKind, FuncDecl, Model};
 
 /// Extract all uninterpreted function applications from the given expression. The expression is
 /// only allowed to use `Int` and `Bool` functions.
@@ -85,4 +85,17 @@ pub fn extract_function_type_signature(
     let out = AstType::try_from(function.range())
         .map_err(|err| anyhow!("Function {:?} has invalid return type ({}).", function, err))?;
     Ok((args, out))
+}
+
+/// Evaluate a [`Dynamic`] expression in the given [`Model`], assuming the expression is
+/// either an `Int` or a `Bool`. Subsequently cast the result to `u32`.
+pub fn model_eval_int(expr: &Dynamic, model: &Model) -> u32 {
+    let result = model.eval(expr, true).expect("Cannot evaluate.");
+    if let Some(value) = result.as_bool() {
+        u32::from(value.as_bool().unwrap())
+    } else if let Some(value) = result.as_int() {
+        u32::try_from(value.as_u64().unwrap()).unwrap()
+    } else {
+        panic!("Function did not evaluate to bool/number.")
+    }
 }
