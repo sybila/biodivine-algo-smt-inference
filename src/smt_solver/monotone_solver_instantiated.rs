@@ -208,7 +208,7 @@ impl<INNER: AbstractSolver> AbstractSolver for InstantiatedMonotoneSolver<INNER>
         }
     }
 
-    fn check(&self) -> SatResult {
+    fn check(&mut self) -> SatResult {
         self.inner.check()
     }
 

@@ -167,7 +167,7 @@ impl<INNER: AbstractSolver> AbstractSolver for QuantifiedMonotoneSolver<INNER> {
         self.inner.assert(formula);
     }
 
-    fn check(&self) -> SatResult {
+    fn check(&mut self) -> SatResult {
         self.inner.check()
     }
 

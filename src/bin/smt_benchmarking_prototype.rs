@@ -7,8 +7,8 @@ use biodivine_algo_smt_inference::smt_solver::{
     QuantifiedMonotoneSolver,
 };
 use biodivine_lib_param_bn::{BooleanNetwork, ModelAnnotation};
-use clap::builder::PossibleValuesParser;
 use clap::Parser;
+use clap::builder::PossibleValuesParser;
 use std::collections::BTreeMap;
 use z3::SatResult;
 

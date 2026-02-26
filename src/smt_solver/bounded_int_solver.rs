@@ -88,7 +88,7 @@ impl<SOLVER: AbstractSolver> AbstractSolver for BoundedIntSolver<SOLVER> {
         self.inner.assert(formula);
     }
 
-    fn check(&self) -> SatResult {
+    fn check(&mut self) -> SatResult {
         self.inner.check()
     }
 

@@ -40,7 +40,7 @@ fn test_toy_4v_bn_single_solution() {
 
     // Result should be SAT, with both optimal fixed points differing in a single
     // bit from the specification
-    let solver = get_instantiation_solver(&inference_problem);
+    let mut solver = get_instantiation_solver(&inference_problem);
     assert_eq!(solver.check(), SatResult::Sat);
 
     let model = solver.get_model().unwrap();
@@ -200,7 +200,7 @@ fn test_myeloid_bn_sat() {
         .unwrap();
 
     // Result should be SAT, the model completely satisfying the specification
-    let solver = get_instantiation_solver(&inference_problem);
+    let mut solver = get_instantiation_solver(&inference_problem);
     assert_eq!(solver.check(), SatResult::Sat);
 
     let model = solver.get_model().unwrap();
@@ -232,7 +232,7 @@ fn test_myeloid_bn_unsat() {
 
     // Result should be SAT, the model differing in one bit from the specification
     // The different bit is GATA2 value (first value) in Megakaryocyte observation
-    let solver = get_instantiation_solver(&inference_problem);
+    let mut solver = get_instantiation_solver(&inference_problem);
     assert_eq!(solver.check(), SatResult::Sat);
 
     // Find index of GATA2 (variables in SMT state are alphabetical)

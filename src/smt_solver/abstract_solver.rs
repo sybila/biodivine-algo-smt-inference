@@ -12,7 +12,7 @@ use z3::{FuncDecl, Model, SatResult};
 #[auto_impl(Box)]
 pub trait AbstractSolver {
     fn assert(&mut self, formula: &Bool);
-    fn check(&self) -> SatResult;
+    fn check(&mut self) -> SatResult;
     fn get_model(&self) -> Option<Model>;
     fn get_assertions(&self) -> Vec<Bool>;
 
@@ -55,7 +55,7 @@ impl AbstractSolver for z3::Solver {
         z3::Solver::assert(self, formula);
     }
 
-    fn check(&self) -> SatResult {
+    fn check(&mut self) -> SatResult {
         z3::Solver::check(self)
     }
 
@@ -74,7 +74,7 @@ impl AbstractSolver for z3::Optimize {
         z3::Optimize::assert(self, formula);
     }
 
-    fn check(&self) -> SatResult {
+    fn check(&mut self) -> SatResult {
         z3::Optimize::check(self, &[])
     }
 

@@ -44,7 +44,7 @@ fn one_fixed_point_both_possible() {
     problem.assert_fixed_point("fix");
     problem.assert_state_observation("fix", &specification);
 
-    let solver = get_instantiation_solver(&problem);
+    let mut solver = get_instantiation_solver(&problem);
     assert_eq!(solver.check(), SatResult::Sat);
     let model = solver.get_model().unwrap();
     assert_eq!(fix.extract_state(&model), vec![false, true, false]);
@@ -62,7 +62,7 @@ fn one_fixed_point_both_possible() {
     problem.assert_fixed_point("fix");
     problem.assert_state_observation("fix", &specification);
 
-    let solver = get_instantiation_solver(&problem);
+    let mut solver = get_instantiation_solver(&problem);
     assert_eq!(solver.check(), SatResult::Sat);
     let model = solver.get_model().unwrap();
     assert_eq!(fix.extract_state(&model), vec![false, true, true]);
@@ -90,7 +90,7 @@ fn one_fixed_point_optimize() {
     problem.assert_fixed_point("fix");
     problem.assert_state_observation("fix", &specification);
 
-    let solver = get_instantiation_solver(&problem);
+    let mut solver = get_instantiation_solver(&problem);
     assert_eq!(solver.check(), SatResult::Sat);
     let model = solver.get_model().unwrap();
     assert_eq!(fix.extract_state(&model), vec![false, true, false]);
@@ -112,7 +112,7 @@ fn one_fixed_point_optimize() {
     problem.assert_fixed_point("fix");
     problem.assert_state_observation("fix", &specification);
 
-    let solver = get_instantiation_solver(&problem);
+    let mut solver = get_instantiation_solver(&problem);
     assert_eq!(solver.check(), SatResult::Sat);
     let model = solver.get_model().unwrap();
     assert_eq!(fix.extract_state(&model), vec![false, true, true]);

@@ -3,11 +3,11 @@ use crate::smt_solver::Monotonicity;
 use crate::smt_solver::Monotonicity::Positive;
 use crate::smt_solver::typed_ast::AstType;
 use Monotonicity::Negative;
+use anyhow::anyhow;
+use biodivine_lib_param_bn::{FnUpdate, VariableId};
 use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter};
-use anyhow::anyhow;
-use biodivine_lib_param_bn::{FnUpdate, VariableId};
 
 /// A simple struct that represents an "integer function" by listing a disjunction
 /// of terms for each output level. Note that the lists of terms are not necessarily exclusive
@@ -82,15 +82,23 @@ impl IntFunction {
     /// function is Boolean.
     pub fn as_update_function(&self, args: &[VariableId]) -> Result<FnUpdate, anyhow::Error> {
         if self.signature.1 != AstType::Bool {
-            return Err(anyhow!("Conversion to `FnUpdate` failed: the function is not boolean."));
+            return Err(anyhow!(
+                "Conversion to `FnUpdate` failed: the function is not boolean."
+            ));
         }
         for arg in self.signature.0.iter() {
             if *arg != AstType::Bool {
-                return Err(anyhow!("Conversion to `FnUpdate` failed: the function is not boolean."));
+                return Err(anyhow!(
+                    "Conversion to `FnUpdate` failed: the function is not boolean."
+                ));
             }
         }
         if args.len() != self.signature.0.len() {
-            return Err(anyhow!("Expected {} arguments but got {}.", self.signature.0.len(), args.len()));
+            return Err(anyhow!(
+                "Expected {} arguments but got {}.",
+                self.signature.0.len(),
+                args.len()
+            ));
         }
 
         let Some(clauses) = self.terms.get(&1) else {
@@ -98,26 +106,31 @@ impl IntFunction {
             return Ok(FnUpdate::mk_false());
         };
 
-        let clauses = clauses.iter()
-            .map(|clause | {
-                let clause = clause.iter().map(|atom| {
-                    let var = args[atom.arg_index];
-                    let var = FnUpdate::mk_var(var);
-                    assert!(atom.val == 0 || atom.val == 1);
-                    if atom.val == 0 {
-                        match atom.op {
-                            LE | EQ => var.negation(),  // x <= 0 = !x, x == 0 = !x
-                            GE => FnUpdate::mk_true(),  // x >= 0 = 1
+        let clauses = clauses
+            .iter()
+            .map(|clause| {
+                let clause = clause
+                    .iter()
+                    .map(|atom| {
+                        let var = args[atom.arg_index];
+                        let var = FnUpdate::mk_var(var);
+                        assert!(atom.val == 0 || atom.val == 1);
+                        if atom.val == 0 {
+                            match atom.op {
+                                LE | EQ => var.negation(), // x <= 0 = !x, x == 0 = !x
+                                GE => FnUpdate::mk_true(), // x >= 0 = 1
+                            }
+                        } else {
+                            match atom.op {
+                                LE => FnUpdate::mk_true(), // x <= 1 = 1
+                                GE | EQ => var,            // x >= 1 = x, x == 1 = x
+                            }
                         }
-                    } else {
-                        match atom.op {
-                            LE => FnUpdate::mk_true(),  // x <= 1 = 1
-                            GE | EQ => var,             // x >= 1 = x, x == 1 = x
-                        }
-                    }
-                }).collect::<Vec<_>>();
+                    })
+                    .collect::<Vec<_>>();
                 FnUpdate::mk_conjunction(&clause)
-            }).collect::<Vec<_>>();
+            })
+            .collect::<Vec<_>>();
 
         Ok(FnUpdate::mk_disjunction(&clauses))
     }

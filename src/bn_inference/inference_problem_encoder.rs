@@ -4,10 +4,10 @@ use crate::smt_solver::typed_ast::{MapDynAst, TypedAst};
 use crate::smt_solver::{
     AbstractBoundedIntSolver, AbstractMonotoneSolver, AbstractSolver, IntFunction,
 };
+use anyhow::anyhow;
 use biodivine_lib_param_bn::{BooleanNetwork, Regulation, RegulatoryGraph, VariableId};
 use log::info;
 use std::collections::BTreeMap;
-use anyhow::anyhow;
 use z3::{FuncDecl, Model};
 
 /// A static collection of SMT formulas and declarations that are collectively used to
@@ -220,7 +220,6 @@ impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceProblemEncoder<'a, S
         model: &Model,
         infer_graph: bool,
     ) -> Result<BooleanNetwork, anyhow::Error> {
-
         let mut names = Vec::new();
         for var in self.problem.variables() {
             names.push(self.problem[var].name.clone());
@@ -237,7 +236,8 @@ impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceProblemEncoder<'a, S
                     target: var,
                     observable: false,
                     monotonicity: None,
-                }).map_err(|e| anyhow!(e))?;
+                })
+                .map_err(|e| anyhow!(e))?;
             }
         }
 
@@ -247,7 +247,8 @@ impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceProblemEncoder<'a, S
             let function = self.decode_update_function(var, solver, model)?;
             let regulators = Vec::from_iter(var_data.regulators.iter().cloned());
             let function = function.as_update_function(&regulators)?;
-            bn.set_update_function(var, Some(function)).map_err(|e| anyhow!(e))?;
+            bn.set_update_function(var, Some(function))
+                .map_err(|e| anyhow!(e))?;
         }
 
         if infer_graph {
