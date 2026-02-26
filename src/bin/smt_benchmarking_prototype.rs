@@ -1,14 +1,14 @@
-use biodivine_algo_smt_inference::bn_inference::InferenceProblem;
 use biodivine_algo_smt_inference::bn_inference::constraints::{
     StateHasExactObservation, StateIsFixedPoint, StateObservation,
 };
+use biodivine_algo_smt_inference::bn_inference::{InferenceProblem, InferenceProblemEncoder};
 use biodivine_algo_smt_inference::smt_solver::{
     AbstractSolver, BoundedIntSolver, DynMonotoneBoundedIntSolver, InstantiatedMonotoneSolver,
     QuantifiedMonotoneSolver,
 };
 use biodivine_lib_param_bn::{BooleanNetwork, ModelAnnotation};
-use clap::Parser;
 use clap::builder::PossibleValuesParser;
+use clap::Parser;
 use std::collections::BTreeMap;
 use z3::SatResult;
 
@@ -105,7 +105,8 @@ fn main() -> Result<(), anyhow::Error> {
 
     println!("Inference problem initialized. Creating constraints.");
 
-    inference_problem.apply_constraints(&mut solver, args.propagate_observations)?;
+    let encoder =
+        InferenceProblemEncoder::new(&inference_problem, &mut solver, args.propagate_observations)?;
 
     if args.verbose {
         println!("Checking for solution...");
@@ -118,25 +119,26 @@ fn main() -> Result<(), anyhow::Error> {
         println!("{}", res);
     }
 
-    println!("{:?}", solver.get_model());
+    // If we have a model and an output path was given, save it
+    if result == SatResult::Sat
+        && let Some(output_path) = args.output_path
+    {
+        let model = solver.get_model().unwrap();
+        match encoder.decode_boolean_network(&solver, &model, true) {
+            Ok(bn) => {
+                std::fs::write(output_path, bn.to_string())?;
+            }
+            Err(err) => {
+                println!("Unable to decode boolean network. {err}",);
+            }
+        }
 
-    // TODO: Restore this functionality:
-    // // If we have a model and an output path was given, save it
-    // if result == SatResult::Sat
-    //     && let Some(output_path) = args.output_path
-    // {
-    //     let model = solver.get_model().unwrap();
-    //     println!("{:?}", model);
-    //     if args.verbose {
-    //         println!("Saving BN at: {output_path}");
-    //     }
-    //
-    //     // Reconstruct the BN instance using the functions extracted from the z3 model
-    //     // This works well as long as all update functions are just an uninterpreted
-    //     // function applied to variable's regulators.
-    //     let bn_instance = inference.extract_bn_instance_simplified(&model);
-    //     std::fs::write(output_path, bn_instance.to_string())?;
-    // }
+        for var in psbn.variables() {
+            let function = encoder.decode_update_function(var, &solver, &model)?;
+            println!("=== Function table {} ===", psbn.get_variable_name(var));
+            println!("{}", function);
+        }
+    }
 
     Ok(())
 }

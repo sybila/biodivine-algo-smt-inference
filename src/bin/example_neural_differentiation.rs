@@ -1,8 +1,8 @@
 use biodivine_algo_smt_inference::StateSpecification;
-use biodivine_algo_smt_inference::bn_inference::InferenceProblem;
 use biodivine_algo_smt_inference::bn_inference::constraints::{
     StateHasWeightedObservation, StateIsFixedPoint,
 };
+use biodivine_algo_smt_inference::bn_inference::{InferenceProblem, InferenceProblemEncoder};
 use biodivine_algo_smt_inference::smt_solver::{
     AbstractSolver, BoundedIntSolver, DynMonotoneBoundedIntOptimizeSolver,
     InstantiatedMonotoneSolver, QuantifiedMonotoneSolver,
@@ -146,7 +146,7 @@ fn main() -> Result<(), anyhow::Error> {
         Box::new(InstantiatedMonotoneSolver::new(inner_solver))
     };
 
-    inference_problem.apply_constraints(&mut solver, true)?;
+    let _encoder = InferenceProblemEncoder::new(&inference_problem, &mut solver, true)?;
 
     //let states_copy = states.clone();
     //let observations_copy = observations.clone();
