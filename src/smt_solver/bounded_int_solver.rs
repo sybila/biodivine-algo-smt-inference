@@ -5,7 +5,7 @@ use anyhow::anyhow;
 use num_rational::BigRational;
 use std::collections::BTreeMap;
 use z3::ast::{Ast, Bool, Dynamic, Int};
-use z3::{FuncDecl, Model, SatResult};
+use z3::{DeclKind, FuncDecl, Model, SatResult};
 
 /// Initial implementation of [`AbstractBoundedIntSolver`] which actually uses `Int` values
 /// and additional assertions. Eventually, we may want to extend the bounded domains to
@@ -63,6 +63,12 @@ impl<SOLVER: AbstractSolver> AbstractBoundedIntSolver for BoundedIntSolver<SOLVE
         f: &FuncDecl,
         domain: Option<(u32, u32)>,
     ) -> Result<(), anyhow::Error> {
+        if f.name().as_str() == "Int" {
+            // If `f` is an integer constant, ignore it.
+            // TODO: Is there a better way to handle this?
+            return Ok(())
+        }
+
         // Check that this is not a duplicate declaration:
         if let Some(existing) = self.declarations.get(&f.name()) {
             return if *existing != domain {
