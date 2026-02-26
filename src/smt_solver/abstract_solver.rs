@@ -9,6 +9,7 @@ pub trait AbstractSolver {
     fn assert(&mut self, formula: &Bool);
     fn check(&self) -> SatResult;
     fn get_model(&self) -> Option<Model>;
+    fn get_assertions(&self) -> Vec<Bool>;
 }
 
 impl AbstractSolver for z3::Solver {
@@ -24,6 +25,10 @@ impl AbstractSolver for z3::Solver {
     fn get_model(&self) -> Option<Model> {
         z3::Solver::get_model(self)
     }
+
+    fn get_assertions(&self) -> Vec<Bool> {
+        z3::Solver::get_assertions(self)
+    }
 }
 
 impl AbstractSolver for z3::Optimize {
@@ -38,5 +43,9 @@ impl AbstractSolver for z3::Optimize {
 
     fn get_model(&self) -> Option<Model> {
         z3::Optimize::get_model(self)
+    }
+
+    fn get_assertions(&self) -> Vec<Bool> {
+        z3::Optimize::get_assertions(self)
     }
 }

@@ -154,6 +154,10 @@ impl<INNER: AbstractSolver> AbstractSolver for QuantifiedMonotoneSolver<INNER> {
     fn get_model(&self) -> Option<Model> {
         self.inner.get_model()
     }
+
+    fn get_assertions(&self) -> Vec<Bool> {
+        self.inner.get_assertions()
+    }
 }
 
 impl<INNER: AbstractOptimizeSolver> AbstractOptimizeSolver for QuantifiedMonotoneSolver<INNER> {
