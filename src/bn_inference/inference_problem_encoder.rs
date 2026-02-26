@@ -1,11 +1,14 @@
 use crate::bn_inference::InferenceProblem;
 use crate::bn_inference::constraints::StateHasExactObservation;
 use crate::smt_solver::typed_ast::{MapDynAst, TypedAst};
-use crate::smt_solver::{AbstractBoundedIntSolver, AbstractSolver};
-use biodivine_lib_param_bn::VariableId;
+use crate::smt_solver::{
+    AbstractBoundedIntSolver, AbstractMonotoneSolver, AbstractSolver, IntFunction,
+};
+use biodivine_lib_param_bn::{BooleanNetwork, Regulation, RegulatoryGraph, VariableId};
 use log::info;
 use std::collections::BTreeMap;
-use z3::FuncDecl;
+use anyhow::anyhow;
+use z3::{FuncDecl, Model};
 
 /// A static collection of SMT formulas and declarations that are collectively used to
 /// actually encode an [`InferenceProblem`] into a solver query. Subsequently, this object
@@ -187,5 +190,69 @@ impl<'a, SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<'a, SOLVER> {
         // Make the function call and wrap it into `TypedAst`.
         let function_call = function.apply(&args.iter().dyn_vec());
         TypedAst::cast_dynamic(variable.ast_type(), function_call)
+    }
+}
+
+impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceProblemEncoder<'a, SOLVER> {
+    /// Extract the update function inferred for the given [`VariableId`]. This is similar
+    /// to using [`AbstractMonotoneSolver::extract_monotone_function_points`],
+    /// but it also clamps the arguments of the function to their respective intervals,
+    /// eliminating unnecessary atoms.
+    pub fn decode_update_function(
+        &self,
+        variable: VariableId,
+        solver: &SOLVER,
+        model: &Model,
+    ) -> Result<IntFunction, anyhow::Error> {
+        let mut function =
+            solver.extract_monotone_function_points(self.update_function(variable), model)?;
+        for (i, reg) in self.problem[variable].regulators.iter().enumerate() {
+            function.clamp_argument(i, self.problem[*reg].domain);
+        }
+        function.drop_default_output_level();
+        function.remove_duplicates();
+        Ok(function)
+    }
+
+    pub fn decode_boolean_network(
+        &self,
+        solver: &SOLVER,
+        model: &Model,
+        infer_graph: bool,
+    ) -> Result<BooleanNetwork, anyhow::Error> {
+
+        let mut names = Vec::new();
+        for var in self.problem.variables() {
+            names.push(self.problem[var].name.clone());
+        }
+
+        let mut rg = RegulatoryGraph::new(names);
+        for var in self.problem.variables() {
+            let var_data = &self.problem[var];
+            for reg in var_data.regulators.iter() {
+                // Don't include essential/monotonic constraints,
+                // we'll infer the graph automatically.
+                rg.add_raw_regulation(Regulation {
+                    regulator: *reg,
+                    target: var,
+                    observable: false,
+                    monotonicity: None,
+                }).map_err(|e| anyhow!(e))?;
+            }
+        }
+
+        let mut bn = BooleanNetwork::new(rg);
+        for var in self.problem.variables() {
+            let var_data = &self.problem[var];
+            let function = self.decode_update_function(var, solver, model)?;
+            let regulators = Vec::from_iter(var_data.regulators.iter().cloned());
+            let function = function.as_update_function(&regulators)?;
+            bn.set_update_function(var, Some(function)).map_err(|e| anyhow!(e))?;
+        }
+
+        if infer_graph {
+            bn = bn.infer_valid_graph().map_err(|e| anyhow!(e))?;
+        }
+        Ok(bn)
     }
 }
