@@ -23,4 +23,9 @@ pub trait AbstractMonotoneSolver: AbstractSolver {
     /// the solver should support functions with domain/range using `Int` and `Bool` values.
     /// /// Returns an error result if the function-argument combination is not supported.
     fn set_antimonotone(&mut self, f: &FuncDecl, i: usize) -> Result<(), anyhow::Error>;
+
+    /// Return `Some(true)` or `Some(false)` if the given function is declared as positively
+    /// or negatively monotone, `None` otherwise.
+    fn is_monotone(&self, f: &FuncDecl, i: usize) -> Option<Monotonicity>;
+
 }

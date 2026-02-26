@@ -1,16 +1,18 @@
 use crate::smt_solver::typed_ast::{AstType, MapDynAst, TypedAst};
 use crate::smt_solver::{
     AbstractBoundedIntSolver, AbstractMonotoneSolver, AbstractOptimizeSolver, AbstractSolver,
-    extract_function_type_signature,
+    Monotonicity, extract_function_type_signature,
 };
 use anyhow::anyhow;
 use num_rational::BigRational;
+use std::collections::{BTreeMap, HashMap};
 use z3::ast::{Bool, Dynamic, forall_const};
 use z3::{FuncDecl, Model, SatResult};
 
 pub struct QuantifiedMonotoneSolver<INNER: AbstractSolver> {
     inner: INNER,
     optimize_boolean_quantifiers: bool,
+    function_info: HashMap<String, BTreeMap<usize, Monotonicity>>,
 }
 
 impl<INNER: AbstractSolver> QuantifiedMonotoneSolver<INNER> {
@@ -20,6 +22,7 @@ impl<INNER: AbstractSolver> QuantifiedMonotoneSolver<INNER> {
         Self {
             inner,
             optimize_boolean_quantifiers,
+            function_info: HashMap::new(),
         }
     }
 
@@ -113,6 +116,11 @@ impl<INNER: AbstractSolver> QuantifiedMonotoneSolver<INNER> {
 
 impl<INNER: AbstractSolver> AbstractMonotoneSolver for QuantifiedMonotoneSolver<INNER> {
     fn set_monotone(&mut self, f: &FuncDecl, i: usize) -> Result<(), anyhow::Error> {
+        self.function_info
+            .entry(f.name())
+            .or_default()
+            .insert(i, Monotonicity::Positive);
+
         self.assert(&Self::mk_monotonicity_constraint(
             f,
             i,
@@ -123,6 +131,11 @@ impl<INNER: AbstractSolver> AbstractMonotoneSolver for QuantifiedMonotoneSolver<
     }
 
     fn set_antimonotone(&mut self, f: &FuncDecl, i: usize) -> Result<(), anyhow::Error> {
+        self.function_info
+            .entry(f.name())
+            .or_default()
+            .insert(i, Monotonicity::Positive);
+
         self.assert(&Self::mk_monotonicity_constraint(
             f,
             i,
@@ -131,6 +144,12 @@ impl<INNER: AbstractSolver> AbstractMonotoneSolver for QuantifiedMonotoneSolver<
         )?);
         Ok(())
     }
+
+    fn is_monotone(&self, f: &FuncDecl, i: usize) -> Option<Monotonicity> {
+        self.function_info
+            .get(&f.name())
+            .and_then(|info| info.get(&i).copied())
+    }
 }
 
 impl Default for QuantifiedMonotoneSolver<z3::Solver> {
@@ -138,6 +157,7 @@ impl Default for QuantifiedMonotoneSolver<z3::Solver> {
         QuantifiedMonotoneSolver {
             inner: z3::Solver::new(),
             optimize_boolean_quantifiers: true,
+            function_info: HashMap::new(),
         }
     }
 }

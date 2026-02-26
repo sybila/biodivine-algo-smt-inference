@@ -190,6 +190,12 @@ impl<INNER: AbstractSolver> AbstractMonotoneSolver for InstantiatedMonotoneSolve
     fn set_antimonotone(&mut self, f: &FuncDecl, i: usize) -> Result<(), anyhow::Error> {
         self.set_monotonicity(f, i, Monotonicity::Negative)
     }
+
+    fn is_monotone(&self, f: &FuncDecl, i: usize) -> Option<Monotonicity> {
+        self.function_info
+            .get(&f.name())
+            .and_then(|info| info.arguments.get(&i).copied())
+    }
 }
 
 impl<INNER: AbstractSolver> AbstractSolver for InstantiatedMonotoneSolver<INNER> {
