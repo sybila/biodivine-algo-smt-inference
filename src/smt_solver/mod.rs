@@ -11,11 +11,11 @@ pub use abstract_monotone_solver::Monotonicity;
 mod abstract_bounded_int_solver;
 pub use abstract_bounded_int_solver::AbstractBoundedIntSolver;
 
-mod quantified_monotone_solver;
-pub use quantified_monotone_solver::QuantifiedMonotoneSolver;
+mod monotone_solver_qunatified;
+pub use monotone_solver_qunatified::QuantifiedMonotoneSolver;
 
-mod instantiated_monotone_solver;
-pub use instantiated_monotone_solver::InstantiatedMonotoneSolver;
+mod monotone_solver_instantiated;
+pub use monotone_solver_instantiated::InstantiatedMonotoneSolver;
 
 mod bounded_int_solver;
 pub use bounded_int_solver::BoundedIntSolver;
