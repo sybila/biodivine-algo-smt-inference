@@ -30,5 +30,10 @@ pub use abstract_solver_dyn::*;
 /// types in a slightly more convenient way.
 pub mod typed_ast;
 
+pub mod int_function;
+pub use int_function::CmpOp;
+pub use int_function::IntAtom;
+pub use int_function::IntFunction;
+
 mod utils;
 pub(crate) use utils::*;

@@ -11,6 +11,15 @@ pub enum AstType {
     Bool,
 }
 
+impl Display for AstType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AstType::Int => write!(f, "Int"),
+            AstType::Bool => write!(f, "Bool"),
+        }
+    }
+}
+
 impl From<AstType> for SortKind {
     fn from(value: AstType) -> Self {
         match value {
