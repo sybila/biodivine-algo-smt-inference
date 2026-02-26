@@ -19,7 +19,7 @@ struct Arguments {
     model_path: String,
 
     /// Solver class to use.
-    #[clap(value_parser = PossibleValuesParser::new(["quantified", "quantified-optimized", "instantiation"]))]
+    #[clap(value_parser = PossibleValuesParser::new(["quantified", "quantified-optimized", "instantiation", "instantiation-lazy"]))]
     solver: String,
 
     /// Enable verbose output (otherwise, only "0" or "1" is printed at the end).
@@ -66,6 +66,7 @@ fn main() -> Result<(), anyhow::Error> {
         "quantified" => Box::new(QuantifiedMonotoneSolver::new(inner_solver, false)),
         "quantified-optimized" => Box::new(QuantifiedMonotoneSolver::new(inner_solver, true)),
         "instantiation" => Box::new(InstantiatedMonotoneSolver::new(inner_solver)),
+        "instantiation-lazy" => Box::new(InstantiatedMonotoneSolver::new_lazy(inner_solver)),
         _ => panic!("Unknown solver: {}", args.solver),
     };
 

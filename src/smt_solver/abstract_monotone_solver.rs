@@ -9,6 +9,9 @@ pub enum Monotonicity {
 }
 
 /// Trait implemented by solvers that can explicitly reason about functions with monotone inputs.
+///
+/// **All monotonicity properties of a function must be declared before the function is first
+/// used in an assert.**
 #[auto_impl(Box)]
 pub trait AbstractMonotoneSolver: AbstractSolver {
     /// Declare the i-th argument of a function as *positively monotone*.

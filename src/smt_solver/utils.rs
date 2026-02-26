@@ -99,3 +99,16 @@ pub fn model_eval_int(expr: &Dynamic, model: &Model) -> u32 {
         panic!("Function did not evaluate to bool/number.")
     }
 }
+
+/// Assume the given expression is an Integer of Boolean uninterpreted function. Evaluate
+/// its arguments and the function itself.
+pub fn model_eval_int_function(expr: &Dynamic, model: &Model) -> (Vec<u32>, u32) {
+    let args = expr
+        .children()
+        .iter()
+        .map(|child| model_eval_int(child, model))
+        .collect::<Vec<_>>();
+
+    let output = model_eval_int(expr, model);
+    (args, output)
+}

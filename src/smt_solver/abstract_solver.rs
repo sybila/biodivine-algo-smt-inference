@@ -1,6 +1,6 @@
 use crate::smt_solver::{
     IntAtom, IntFunction, extract_function_applications, extract_function_type_signature,
-    model_eval_int,
+    model_eval_int_function,
 };
 use auto_impl::auto_impl;
 use log::trace;
@@ -31,14 +31,13 @@ pub trait AbstractSolver {
                 if func_call.decl().name() != f.name() {
                     continue;
                 }
-                let args = func_call
-                    .children()
-                    .iter()
+                let (args, output) = model_eval_int_function(&func_call, model);
+                let args = args
+                    .into_iter()
                     .enumerate()
-                    .map(|(i, child)| IntAtom::eq(i, model_eval_int(child, model)))
+                    .map(|(i, val)| IntAtom::eq(i, val))
                     .collect::<Vec<_>>();
 
-                let output = model_eval_int(&func_call, model);
                 terms.entry(output).or_default().push(args);
             }
         }
