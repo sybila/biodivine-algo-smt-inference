@@ -466,14 +466,14 @@ impl InferenceProblem {
     }
 }
 
-/// Given a concrete expression of a previously unintepreted function, substitute all 
+/// Given a concrete expression of a previously unintepreted function, substitute all
 /// formal args with the actual arguments that the function is applied to (e.g., in some of
 /// the BN's update functions). The formal arguments variables must be named in a standardized
 /// way - <prefix>1, <prefix>2,... This prefix (such as `x_` or `var_`) is provided using the
 /// `var_prefix` argument.
 ///
 /// Returns a new FnUpdate instance for the expression, with substituted variable names.
-/// 
+///
 /// TODO: not too efficient, but should only be run once for each function at the end.
 pub fn substitute_fn_args(
     expression: &str,
@@ -482,19 +482,19 @@ pub fn substitute_fn_args(
     var_prefix: &str,
 ) -> FnUpdate {
     let mut modified_expression = expression.to_string();
-    
+
     // We'll do this in two steps to avoid clashes between formal and actual argument names.
     // First replace the vars with placeholders which cant appear in any variable names
     let mut formal_keys: Vec<String> = (0..applied_args.len())
-        .map(|i| format!("{var_prefix}{}", i)) 
+        .map(|i| format!("{var_prefix}{}", i))
         .collect();
     // Sort by length to ensure x_10 is replaced before x_1
-    formal_keys.sort_by_key(|k| std::cmp::Reverse(k.len()));  
+    formal_keys.sort_by_key(|k| std::cmp::Reverse(k.len()));
 
     for key in &formal_keys {
         let index_str = &key[var_prefix.len()..]; // get index ("x_10" -> "10")
         // Use a placeholder that DOES NOT contain the prefix (e.g., #10#)
-        let placeholder = format!("#{}#", index_str);        
+        let placeholder = format!("#{}#", index_str);
         modified_expression = modified_expression.replace(key, &placeholder);
     }
 
@@ -511,8 +511,8 @@ pub fn substitute_fn_args(
 
 #[cfg(test)]
 mod unit_tests {
-    use biodivine_lib_param_bn::BooleanNetwork;
     use crate::substitute_fn_args;
+    use biodivine_lib_param_bn::BooleanNetwork;
 
     #[test]
     /// Test substituting function arguments.
@@ -531,9 +531,14 @@ mod unit_tests {
             "#,
         )
         .unwrap();
-        
+
         let var_c = bn.as_graph().find_variable("c").unwrap();
-        let (_, arguments) = bn.get_update_function(var_c).as_ref().unwrap().as_param().unwrap();
+        let (_, arguments) = bn
+            .get_update_function(var_c)
+            .as_ref()
+            .unwrap()
+            .as_param()
+            .unwrap();
         let modified_fn_tree = substitute_fn_args(expression, arguments, &bn, "x_");
         assert_eq!(modified_fn_tree.to_string(&bn), "(a & b & !c) | (!a & b)");
     }
@@ -553,9 +558,14 @@ mod unit_tests {
             "#,
         )
         .unwrap();
-        
+
         let variable = bn.as_graph().find_variable("x_1b").unwrap();
-        let (_, arguments) = bn.get_update_function(variable).as_ref().unwrap().as_param().unwrap();
+        let (_, arguments) = bn
+            .get_update_function(variable)
+            .as_ref()
+            .unwrap()
+            .as_param()
+            .unwrap();
         let modified_fn_tree = substitute_fn_args(expression, arguments, &bn, "x_");
         assert_eq!(modified_fn_tree.to_string(&bn), "(x_1a & x_1b) | !x_1a");
     }

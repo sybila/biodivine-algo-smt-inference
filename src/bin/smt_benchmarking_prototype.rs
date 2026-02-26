@@ -113,7 +113,7 @@ fn main() {
                     let uninterpreted_fn_id = format!("f_{var_name}"); // id in SMT encoding
                     if let Some(fn_dnf_str) = monotone_fn_map.get(&uninterpreted_fn_id) {
                         // If the map contains the expression, use it
-                        // We just need to substitute variable names in the fn expression string 
+                        // We just need to substitute variable names in the fn expression string
                         // (x_0, x_1,..) with the actual function arguments
                         let update = substitute_fn_args(fn_dnf_str, &fn_args, psbn, "x_");
                         bn_instance
