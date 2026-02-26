@@ -1,7 +1,7 @@
+use crate::bn_inference::InferenceConstraint;
 use crate::bn_inference::constraints::{RegulatorIsEssential, RegulatorIsMonotone};
-use crate::bn_inference::{InferenceConstraint, InferenceProblemEncoder};
+use crate::smt_solver::AbstractMonotoneBoundedIntSolver;
 use crate::smt_solver::typed_ast::{AstType, TypedAst};
-use crate::smt_solver::{AbstractBoundedIntSolver, AbstractMonotoneBoundedIntSolver};
 use biodivine_lib_param_bn::{Monotonicity, RegulatoryGraph, VariableId};
 use std::collections::BTreeSet;
 use std::ops::{Index, IndexMut};
@@ -177,28 +177,6 @@ impl<SOLVER: 'static> InferenceProblem<SOLVER> {
     ) -> Result<(), anyhow::Error> {
         constraint.validate(self)?;
         self.inference_constraints.push(Box::new(constraint));
-        Ok(())
-    }
-}
-
-impl<SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblem<SOLVER> {
-    /// Apply the constraints of this [`InferenceProblem`] into the given compatible solver.
-    ///
-    /// Currently, at least [`AbstractBoundedIntSolver`] is required, since we allow
-    /// usage of bounded `Int` variables. In the future, there may be a variant that only
-    /// supports `Bool` variables and does not need this requirement.
-    ///
-    /// If `propagate_observations` is set to `true`, the encoder will try to inline known
-    /// values of atoms that are fully determined by observations.
-    pub fn apply_constraints(
-        &self,
-        solver: &mut SOLVER,
-        propagate_observations: bool,
-    ) -> Result<(), anyhow::Error> {
-        let encoder = InferenceProblemEncoder::new(self, solver, propagate_observations)?;
-        for constraint in self.constraints() {
-            constraint.assert_self(&encoder, solver)?;
-        }
         Ok(())
     }
 }

@@ -21,8 +21,8 @@ pub struct InferenceProblemEncoder<'a, SOLVER> {
 }
 
 impl<'a, SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<'a, SOLVER> {
-    /// Build a new encoder for a given [`InferenceProblem`], possibly adding initial assertions
-    /// to the solver.
+    /// Build a new encoder for a given [`InferenceProblem`] while also adding all
+    /// required assertions to the given solver.
     ///
     /// Once created, the encoder (and the underlying problem) should effectively remain immutable
     /// to guarantee that the problem and its encoding stay in sync.
@@ -91,6 +91,10 @@ impl<'a, SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<'a,
                     solver.declare_int(&func, Some(var_data.domain))?;
                 }
             }
+        }
+
+        for constraint in problem.constraints() {
+            constraint.assert_self(&encoder, solver)?;
         }
 
         Ok(encoder)
