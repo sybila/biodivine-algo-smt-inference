@@ -15,9 +15,10 @@ type FunctionName = String;
 
 pub struct InstantiatedMonotoneSolver<INNER: AbstractSolver> {
     inner: INNER,
-    // Indicates that the solver should add monotonicity lemmas lazily during solving.
+    /// Indicates that the solver should add monotonicity lemmas lazily during solving.
     lazy_lemma_creation: bool,
-    // Indicates whether assert was called (monotonicity has to be declared before all assertions).
+    /// Indicates which functions appeared in existing assertions (monotonicity must be declared
+    /// before the function is first used).
     has_asserted: HashSet<FunctionName>,
     function_info: HashMap<FunctionName, FunctionMonotonicityData>,
 }
@@ -249,8 +250,7 @@ impl<INNER: AbstractSolver> InstantiatedMonotoneSolver<INNER> {
 
         if i >= f.arity() {
             return Err(anyhow!(
-                "Argument `{}` not valid for function with arity `{}`.",
-                i,
+                "Argument `{i}` not valid for function with arity `{}`.",
                 f.arity()
             ));
         }
@@ -338,7 +338,7 @@ impl<INNER: AbstractSolver> AbstractSolver for InstantiatedMonotoneSolver<INNER>
     fn check(&mut self) -> SatResult {
         loop {
             // We need a loop because in lazy mode, the first result may not be final.
-            
+
             let result = self.inner.check();
             if !self.lazy_lemma_creation || result != SatResult::Sat {
                 // If the result is not SAT, the result is always final.

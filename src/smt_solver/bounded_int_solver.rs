@@ -1,5 +1,5 @@
 use crate::smt_solver::{
-    extract_int_functions, AbstractBoundedIntSolver, AbstractOptimizeSolver, AbstractSolver,
+    AbstractBoundedIntSolver, AbstractOptimizeSolver, AbstractSolver, extract_int_functions,
 };
 use anyhow::anyhow;
 use num_rational::BigRational;
@@ -67,7 +67,9 @@ impl<SOLVER: AbstractSolver> AbstractBoundedIntSolver for BoundedIntSolver<SOLVE
             // Users should not add assertions about integer value. Currently, I am not aware
             // of any better way to identify whether `f` is an integer value or actual
             // uninterpreted function.
-            return Err(anyhow!("You seem to be asserting that a constant value is a bounded `Int`."))
+            return Err(anyhow!(
+                "You seem to be asserting that a constant value is a bounded `Int`."
+            ));
         }
 
         // Check that this is not a duplicate declaration:
