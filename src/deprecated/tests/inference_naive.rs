@@ -1,6 +1,5 @@
-use crate::Dataset;
-use crate::run_naive_inference;
-
+use crate::deprecated::naive_inference::run_naive_inference;
+use crate::deprecated::observations::Dataset;
 use biodivine_lib_param_bn::BooleanNetwork;
 use std::fs;
 

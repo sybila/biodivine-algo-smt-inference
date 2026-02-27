@@ -1,4 +1,6 @@
-use biodivine_algo_smt_inference::{BlockingStrategy, Dataset, EncodingMode};
+use biodivine_algo_smt_inference::deprecated::EncodingMode;
+use biodivine_algo_smt_inference::deprecated::blocking::BlockingStrategy;
+use biodivine_algo_smt_inference::deprecated::observations::Dataset;
 use biodivine_lib_param_bn::BooleanNetwork;
 use biodivine_lib_param_bn::symbolic_async_graph::SymbolicAsyncGraph;
 use clap::Parser;

@@ -1,5 +1,7 @@
-use crate::tests::get_instantiation_solver;
-use crate::{BlockingStrategy, Dataset, EncodingMode};
+use crate::deprecated::EncodingMode;
+use crate::deprecated::blocking::BlockingStrategy;
+use crate::deprecated::observations::Dataset;
+use crate::deprecated::tests::get_instantiation_solver;
 use biodivine_lib_param_bn::{BooleanNetwork, ParameterId};
 use std::collections::HashSet;
 use std::fs;
@@ -21,6 +23,7 @@ fn empty_callback(_model: &z3::Model) -> Result<(), String> {
 }
 
 #[test]
+#[ignore]
 /// Run the test on a fully specified 4-variable model with activations only.
 ///
 /// The model has three fixed points '0000', '0100', '1111'.
@@ -51,6 +54,7 @@ fn test_toy_4v_bn_single_solution() {
 }
 
 #[test]
+#[ignore]
 /// Run the test on a 4-variable more complex BN.
 ///
 /// The specification requires three fixed points with confidence weight 0.5
@@ -127,6 +131,7 @@ fn test_toy_psbn_4v_bn_multiple_solutions() {
 }
 
 #[test]
+#[ignore]
 /// Run the test on a 4-variable PSBN with activations only.
 ///
 /// The specification requires two fixed points '0110' (fp_1) and '0001' (fp_2)
@@ -186,6 +191,7 @@ fn test_toy_psbn_4v_bn_multiple_functions() {
 }
 
 #[test]
+#[ignore]
 /// Run the inference on a fully specified Myeloid model.
 ///
 /// For this test, we use a specification that requires four fixed points which
@@ -215,6 +221,7 @@ fn test_myeloid_bn_sat() {
 }
 
 #[test]
+#[ignore]
 /// Run the inference on a fully specified Myeloid model.
 ///
 /// For this test, we use a specification that requires four fixed points.

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::Dataset;
+use crate::deprecated::observations::Dataset;
 use biodivine_lib_param_bn::biodivine_std::traits::Set;
 use biodivine_lib_param_bn::fixed_points::FixedPoints;
 use biodivine_lib_param_bn::symbolic_async_graph::{GraphColors, SymbolicAsyncGraph};

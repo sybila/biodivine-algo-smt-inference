@@ -1,5 +1,6 @@
-use biodivine_algo_smt_inference::{BlockingStrategy, EncodingMode};
-use biodivine_algo_smt_inference::{Dataset, Observation};
+use biodivine_algo_smt_inference::deprecated::EncodingMode;
+use biodivine_algo_smt_inference::deprecated::blocking::BlockingStrategy;
+use biodivine_algo_smt_inference::deprecated::observations::{Dataset, Observation};
 use biodivine_lib_param_bn::{BooleanNetwork, ModelAnnotation};
 use clap::Parser;
 use clap::builder::PossibleValuesParser;

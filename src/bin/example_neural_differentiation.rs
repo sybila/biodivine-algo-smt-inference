@@ -1,8 +1,8 @@
-use biodivine_algo_smt_inference::StateSpecification;
 use biodivine_algo_smt_inference::bn_inference::constraints::{
     StateHasExactObservation, StateHasWeightedObservation, StateIsFixedPoint,
 };
 use biodivine_algo_smt_inference::bn_inference::{InferenceProblem, InferenceProblemEncoder};
+use biodivine_algo_smt_inference::deprecated::state_specification::StateSpecification;
 use biodivine_algo_smt_inference::smt_solver::{
     AbstractSolver, BoundedIntSolver, DynMonotoneBoundedIntOptimizeSolver,
     InstantiatedMonotoneSolver, QuantifiedMonotoneSolver,

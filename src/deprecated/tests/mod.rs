@@ -1,4 +1,4 @@
-use crate::InferenceProblem;
+use crate::deprecated::{EncodingMode, InferenceProblem};
 use crate::smt_solver::DynOptimizeSolver;
 
 /// Test that on fully specified networks, the inference process validates the
@@ -15,7 +15,7 @@ mod inference_toy_models;
 mod inference_naive;
 
 fn get_instantiation_solver(problem: &InferenceProblem) -> DynOptimizeSolver {
-    problem.build_solver(crate::EncodingMode::Instantiation)
+    problem.build_solver(EncodingMode::Instantiation)
 }
 
 /*

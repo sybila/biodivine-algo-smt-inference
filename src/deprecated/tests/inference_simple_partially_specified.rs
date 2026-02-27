@@ -1,4 +1,5 @@
-use crate::{InferenceProblem, StateSpecification, tests::get_instantiation_solver};
+use crate::deprecated::tests::get_instantiation_solver;
+use crate::deprecated::{InferenceProblem, StateSpecification};
 use biodivine_lib_param_bn::{BooleanNetwork, ParameterId, VariableId};
 use num_rational::BigRational;
 use num_traits::FromPrimitive;

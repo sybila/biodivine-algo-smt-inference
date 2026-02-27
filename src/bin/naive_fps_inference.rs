@@ -1,10 +1,10 @@
-use biodivine_algo_smt_inference::{Dataset, loosen_specification};
-
 use biodivine_lib_param_bn::biodivine_std::traits::Set;
 use biodivine_lib_param_bn::fixed_points::FixedPoints;
 use biodivine_lib_param_bn::symbolic_async_graph::SymbolicAsyncGraph;
 use biodivine_lib_param_bn::{BooleanNetwork, VariableId};
 
+use biodivine_algo_smt_inference::deprecated::naive_inference::loosen_specification;
+use biodivine_algo_smt_inference::deprecated::observations::Dataset;
 use itertools::Itertools;
 use std::fs;
 

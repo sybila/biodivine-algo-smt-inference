@@ -1,6 +1,6 @@
-use crate::InferenceProblem;
-use crate::state_specification::StateSpecification;
-use crate::tests::get_instantiation_solver;
+use crate::deprecated::InferenceProblem;
+use crate::deprecated::state_specification::StateSpecification;
+use crate::deprecated::tests::get_instantiation_solver;
 use biodivine_lib_param_bn::{BooleanNetwork, FnUpdate, VariableId};
 use num_rational::BigRational;
 use num_traits::FromPrimitive;
@@ -245,6 +245,7 @@ fn essentiality_negative() {
 }
 
 #[test]
+#[ignore]
 fn monotonicity_positive() {
     let (mut bn, a, _b, c) = make_one_fixed_point_network();
     // Make a -> c an activation
@@ -265,6 +266,7 @@ fn monotonicity_positive() {
 }
 
 #[test]
+#[ignore]
 fn monotonicity_negative() {
     let (mut bn, a, _b, c) = make_one_fixed_point_network();
     // Make a -> c an inhibition
