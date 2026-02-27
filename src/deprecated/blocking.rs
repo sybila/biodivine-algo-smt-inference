@@ -1,4 +1,4 @@
-use crate::InferenceProblem;
+use crate::deprecated::InferenceProblem;
 use z3::Model;
 use z3::ast::Bool;
 

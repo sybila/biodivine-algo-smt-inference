@@ -1,4 +1,6 @@
-use biodivine_algo_smt_inference::{BlockingStrategy, Dataset};
+use biodivine_algo_smt_inference::deprecated::EncodingMode;
+use biodivine_algo_smt_inference::deprecated::blocking::BlockingStrategy;
+use biodivine_algo_smt_inference::deprecated::observations::Dataset;
 use biodivine_lib_param_bn::BooleanNetwork;
 use biodivine_lib_param_bn::symbolic_async_graph::SymbolicAsyncGraph;
 use clap::Parser;
@@ -45,7 +47,10 @@ fn run_smt_inference(
     println!("{}", dataset_spec.to_debug_string());
     println!("------");
 
-    let inference_problem = dataset_spec.to_inference_problem(bn)?;
+    // TODO: add CLI option to choose whether use hard X soft constraints on fixed points
+    //let inference_problem = dataset_spec.to_inference_problem(bn, None)?;
+    let dummy_weight = 0.5;
+    let inference_problem = dataset_spec.to_inference_problem(bn, Some(dummy_weight))?;
 
     // Use the FixedPointBlocker strategy to iterate over solutions
     let blocker_strategy = make_blocker(blocking_str)?;
@@ -54,47 +59,50 @@ fn run_smt_inference(
     // Iterate solutions, processing each via the callback.
     // The callback summarizes the solution model fixed points and
     // function interpretations
-    inference_problem.get_solutions(&blocker_strategy, None, |model| {
-        if solution_count >= limit {
-            return Err("Solutions limit exceeded. Stopping.".to_string());
-        }
-        solution_count += 1;
+    inference_problem.get_solutions(
+        EncodingMode::Instantiation,
+        &blocker_strategy,
+        Some(limit),
+        |model| {
+            solution_count += 1;
 
-        // Go over all the fixed points and function symbols in the model
-        let mut fix_state_models_str = Vec::new();
-        for obs_id in dataset_spec.observations.keys() {
-            let fix_state = inference_problem.get_state(obs_id);
-            let fix_state_model = fix_state.extract_state(model);
-            fix_state_models_str.push(format!("{obs_id}: {:?}", fix_state_model));
-        }
+            // Go over all the fixed points and function symbols in the model
+            let mut fix_state_models_str = Vec::new();
+            for obs_id in dataset_spec.observations.keys() {
+                let fix_state = inference_problem.get_state(obs_id);
+                let fix_state_model = fix_state.extract_state(model);
+                fix_state_models_str.push(format!("{obs_id}: {:?}", fix_state_model));
+            }
 
-        let mut fn_interpretations_str = Vec::new();
-        for param_id in bn.parameters() {
-            let param_name = bn.get_parameter(param_id).get_name();
-            let (bdd_ctx, fn_bdd) = inference_problem.extract_uninterpreted_symbol(model, param_id);
-            let bdd_expression = fn_bdd.to_boolean_expression(&bdd_ctx);
-            fn_interpretations_str.push(format!(
-                "{}: {:?}",
-                param_name,
-                bdd_expression.to_string()
-            ));
-        }
+            let mut fn_interpretations_str = Vec::new();
+            for param_id in bn.parameters() {
+                let param_name = bn.get_parameter(param_id).get_name();
+                let (bdd_ctx, fn_bdd) =
+                    inference_problem.extract_uninterpreted_symbol(model, param_id);
+                let bdd_expression = fn_bdd.to_boolean_expression(&bdd_ctx);
+                fn_interpretations_str.push(format!(
+                    "{}: {:?}",
+                    param_name,
+                    bdd_expression.to_string()
+                ));
+            }
 
-        println!("\n=== Solution {} ===", solution_count);
-        for fix_state_model_print in fix_state_models_str {
-            println!("{fix_state_model_print}");
-        }
-        for fn_model_print in fn_interpretations_str {
-            println!("{fn_model_print}");
-        }
-        println!("======");
-        Ok(())
-    })?;
+            println!("\n=== Solution {} ===", solution_count);
+            for fix_state_model_print in fix_state_models_str {
+                println!("{fix_state_model_print}");
+            }
+            for fn_model_print in fn_interpretations_str {
+                println!("{fn_model_print}");
+            }
+            println!("======");
+            Ok(())
+        },
+    )?;
 
     if solution_count == 0 {
         println!("No matching specification found");
     } else {
-        println!("\nTotal solutions found: {}", solution_count);
+        println!("\nTotal solutions found: {solution_count} (selected max limit: {limit})");
     }
 
     Ok(())
@@ -120,6 +128,7 @@ fn main() {
     // Parse the PSBN from the AEON file
     let bn_string = fs::read_to_string(&args.psbn_path).unwrap();
     let bn = BooleanNetwork::try_from(bn_string.as_str()).unwrap();
+    let bn = bn.name_implicit_parameters();
 
     // Parse the observations (fixed-point specification) from CSV
     // TODO: currently only uniform 0.5 weights are supported

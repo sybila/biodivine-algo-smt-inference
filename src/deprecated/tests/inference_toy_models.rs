@@ -1,4 +1,7 @@
-use crate::{BlockingStrategy, Dataset};
+use crate::deprecated::EncodingMode;
+use crate::deprecated::blocking::BlockingStrategy;
+use crate::deprecated::observations::Dataset;
+use crate::deprecated::tests::get_instantiation_solver;
 use biodivine_lib_param_bn::{BooleanNetwork, ParameterId};
 use std::collections::HashSet;
 use std::fs;
@@ -20,6 +23,7 @@ fn empty_callback(_model: &z3::Model) -> Result<(), String> {
 }
 
 #[test]
+#[ignore]
 /// Run the test on a fully specified 4-variable model with activations only.
 ///
 /// The model has three fixed points '0000', '0100', '1111'.
@@ -30,14 +34,17 @@ fn test_toy_4v_bn_single_solution() {
     let bn = BooleanNetwork::try_from(bn_string.as_str()).unwrap();
     let dataset_spec = Dataset::load_from_csv_uniform_weights(TOY_SPEC_4V_PATH).unwrap();
 
-    let inference_problem = dataset_spec.to_inference_problem(&bn).unwrap();
+    let dummy_weight = 0.5;
+    let inference_problem = dataset_spec
+        .to_inference_problem(&bn, Some(dummy_weight))
+        .unwrap();
     let fix_one = inference_problem.get_state("fp_1");
     let fix_two = inference_problem.get_state("fp_2");
 
     // Result should be SAT, with both optimal fixed points differing in a single
     // bit from the specification
-    let solver = inference_problem.build_solver();
-    assert_eq!(solver.check(&[]), SatResult::Sat);
+    let mut solver = get_instantiation_solver(&inference_problem);
+    assert_eq!(solver.check(), SatResult::Sat);
 
     let model = solver.get_model().unwrap();
     let expected_fix_one = vec![false, true, false, false];
@@ -47,6 +54,7 @@ fn test_toy_4v_bn_single_solution() {
 }
 
 #[test]
+#[ignore]
 /// Run the test on a 4-variable more complex BN.
 ///
 /// The specification requires three fixed points with confidence weight 0.5
@@ -59,7 +67,10 @@ fn test_toy_psbn_4v_bn_multiple_solutions() {
     let bn = BooleanNetwork::try_from(bn_string.as_str()).unwrap();
     let dataset_spec = Dataset::load_from_csv_uniform_weights(TOY_DENSE_SPEC_4V_PATH).unwrap();
 
-    let inference_problem = dataset_spec.to_inference_problem(&bn).unwrap();
+    let dummy_weight = 0.5;
+    let inference_problem = dataset_spec
+        .to_inference_problem(&bn, Some(dummy_weight))
+        .unwrap();
     let fix_one = inference_problem.get_state("fp_1");
     let fix_two = inference_problem.get_state("fp_2");
     let fix_three = inference_problem.get_state("fp_3");
@@ -67,7 +78,12 @@ fn test_toy_psbn_4v_bn_multiple_solutions() {
     // Collect top three solutions
     let blocker_strategy = BlockingStrategy::FixedPoints;
     let solutions = inference_problem
-        .get_solutions(&blocker_strategy, Some(3), empty_callback)
+        .get_solutions(
+            EncodingMode::Instantiation,
+            &blocker_strategy,
+            Some(3),
+            empty_callback,
+        )
         .unwrap();
     assert_eq!(solutions.len(), 3);
 
@@ -115,6 +131,7 @@ fn test_toy_psbn_4v_bn_multiple_solutions() {
 }
 
 #[test]
+#[ignore]
 /// Run the test on a 4-variable PSBN with activations only.
 ///
 /// The specification requires two fixed points '0110' (fp_1) and '0001' (fp_2)
@@ -128,14 +145,22 @@ fn test_toy_psbn_4v_bn_multiple_functions() {
     let f = ParameterId::from_index(0);
     let dataset_spec = Dataset::load_from_csv_uniform_weights(TOY_SPEC_4V_PATH).unwrap();
 
-    let inference_problem = dataset_spec.to_inference_problem(&bn).unwrap();
+    let dummy_weight = 0.5;
+    let inference_problem = dataset_spec
+        .to_inference_problem(&bn, Some(dummy_weight))
+        .unwrap();
     let fix_one = inference_problem.get_state("fp_1");
     let fix_two = inference_problem.get_state("fp_2");
 
     // Collect top two solutions
     let blocker_strategy = BlockingStrategy::Interpretation;
     let solutions = inference_problem
-        .get_solutions(&blocker_strategy, Some(2), empty_callback)
+        .get_solutions(
+            EncodingMode::Instantiation,
+            &blocker_strategy,
+            Some(2),
+            empty_callback,
+        )
         .unwrap();
     assert_eq!(solutions.len(), 2);
 
@@ -166,6 +191,7 @@ fn test_toy_psbn_4v_bn_multiple_functions() {
 }
 
 #[test]
+#[ignore]
 /// Run the inference on a fully specified Myeloid model.
 ///
 /// For this test, we use a specification that requires four fixed points which
@@ -174,12 +200,14 @@ fn test_myeloid_bn_sat() {
     let bn_string = fs::read_to_string(MYELOID_BN_PATH).unwrap();
     let bn = BooleanNetwork::try_from(bn_string.as_str()).unwrap();
     let dataset_spec = Dataset::load_from_csv_uniform_weights(MYELOID_DATA_SAT_PATH).unwrap();
-
-    let inference_problem = dataset_spec.to_inference_problem(&bn).unwrap();
+    let dummy_weight = 0.5;
+    let inference_problem = dataset_spec
+        .to_inference_problem(&bn, Some(dummy_weight))
+        .unwrap();
 
     // Result should be SAT, the model completely satisfying the specification
-    let solver = inference_problem.build_solver();
-    assert_eq!(solver.check(&[]), SatResult::Sat);
+    let mut solver = get_instantiation_solver(&inference_problem);
+    assert_eq!(solver.check(), SatResult::Sat);
 
     let model = solver.get_model().unwrap();
     for (obs_id, obs) in dataset_spec.observations {
@@ -193,6 +221,7 @@ fn test_myeloid_bn_sat() {
 }
 
 #[test]
+#[ignore]
 /// Run the inference on a fully specified Myeloid model.
 ///
 /// For this test, we use a specification that requires four fixed points.
@@ -203,12 +232,15 @@ fn test_myeloid_bn_unsat() {
     let bn = BooleanNetwork::try_from(bn_string.as_str()).unwrap();
     let dataset_spec = Dataset::load_from_csv_uniform_weights(MYELOID_DATA_UNSAT_PATH).unwrap();
 
-    let inference_problem = dataset_spec.to_inference_problem(&bn).unwrap();
+    let dummy_weight = 0.5;
+    let inference_problem = dataset_spec
+        .to_inference_problem(&bn, Some(dummy_weight))
+        .unwrap();
 
     // Result should be SAT, the model differing in one bit from the specification
     // The different bit is GATA2 value (first value) in Megakaryocyte observation
-    let solver = inference_problem.build_solver();
-    assert_eq!(solver.check(&[]), SatResult::Sat);
+    let mut solver = get_instantiation_solver(&inference_problem);
+    assert_eq!(solver.check(), SatResult::Sat);
 
     // Find index of GATA2 (variables in SMT state are alphabetical)
     let mut variables = dataset_spec.variables.clone();

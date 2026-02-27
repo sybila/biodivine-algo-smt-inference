@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::Dataset;
+use crate::deprecated::observations::Dataset;
 use biodivine_lib_param_bn::biodivine_std::traits::Set;
 use biodivine_lib_param_bn::fixed_points::FixedPoints;
 use biodivine_lib_param_bn::symbolic_async_graph::{GraphColors, SymbolicAsyncGraph};
@@ -45,7 +45,9 @@ pub fn run_naive_inference(
         // Iterate all N-combinations of indices to remove
         for ignore_set in indices.clone().into_iter().combinations(num_to_remove) {
             let loosened_dataset_spec = loosen_specification(dataset_spec, &ignore_set);
-            let current_spec = loosened_dataset_spec.to_specification_list(bn)?;
+            let dummy_weight = 0.5;
+            let current_spec =
+                loosened_dataset_spec.to_specification_list(bn, Some(dummy_weight))?;
 
             // Start with all colors, refine with fixed-point constraints
             let mut satisfying_colors = fixed_points.colors();

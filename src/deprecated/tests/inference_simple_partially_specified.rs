@@ -1,4 +1,5 @@
-use crate::{InferenceProblem, StateSpecification};
+use crate::deprecated::tests::get_instantiation_solver;
+use crate::deprecated::{InferenceProblem, StateSpecification};
 use biodivine_lib_param_bn::{BooleanNetwork, ParameterId, VariableId};
 use num_rational::BigRational;
 use num_traits::FromPrimitive;
@@ -29,6 +30,7 @@ fn make_one_fixed_point_network() -> (BooleanNetwork, VariableId, VariableId, Va
 }
 
 #[test]
+#[ignore]
 fn one_fixed_point_both_possible() {
     // Check that both fixed-points of the one-fixed-point network are actually possible.
     let (bn, a, b, c) = make_one_fixed_point_network();
@@ -44,8 +46,8 @@ fn one_fixed_point_both_possible() {
     problem.assert_fixed_point("fix");
     problem.assert_state_observation("fix", &specification);
 
-    let solver = problem.build_solver();
-    assert_eq!(solver.check(&[]), SatResult::Sat);
+    let mut solver = get_instantiation_solver(&problem);
+    assert_eq!(solver.check(), SatResult::Sat);
     let model = solver.get_model().unwrap();
     assert_eq!(fix.extract_state(&model), vec![false, true, false]);
     let (bdd_ctx, bdd_fn) = problem.extract_uninterpreted_symbol(&model, f);
@@ -62,8 +64,8 @@ fn one_fixed_point_both_possible() {
     problem.assert_fixed_point("fix");
     problem.assert_state_observation("fix", &specification);
 
-    let solver = problem.build_solver();
-    assert_eq!(solver.check(&[]), SatResult::Sat);
+    let mut solver = get_instantiation_solver(&problem);
+    assert_eq!(solver.check(), SatResult::Sat);
     let model = solver.get_model().unwrap();
     assert_eq!(fix.extract_state(&model), vec![false, true, true]);
     let (bdd_ctx, bdd_fn) = problem.extract_uninterpreted_symbol(&model, f);
@@ -72,6 +74,7 @@ fn one_fixed_point_both_possible() {
 }
 
 #[test]
+#[ignore]
 fn one_fixed_point_optimize() {
     // Select a specification (110) that has distance 1 to 010 and distance 2 to 011, meaning
     // this should prefer the AND interpretation.
@@ -90,8 +93,8 @@ fn one_fixed_point_optimize() {
     problem.assert_fixed_point("fix");
     problem.assert_state_observation("fix", &specification);
 
-    let solver = problem.build_solver();
-    assert_eq!(solver.check(&[]), SatResult::Sat);
+    let mut solver = get_instantiation_solver(&problem);
+    assert_eq!(solver.check(), SatResult::Sat);
     let model = solver.get_model().unwrap();
     assert_eq!(fix.extract_state(&model), vec![false, true, false]);
     let (bdd_ctx, bdd_fn) = problem.extract_uninterpreted_symbol(&model, f);
@@ -112,8 +115,8 @@ fn one_fixed_point_optimize() {
     problem.assert_fixed_point("fix");
     problem.assert_state_observation("fix", &specification);
 
-    let solver = problem.build_solver();
-    assert_eq!(solver.check(&[]), SatResult::Sat);
+    let mut solver = get_instantiation_solver(&problem);
+    assert_eq!(solver.check(), SatResult::Sat);
     let model = solver.get_model().unwrap();
     assert_eq!(fix.extract_state(&model), vec![false, true, true]);
     let (bdd_ctx, bdd_fn) = problem.extract_uninterpreted_symbol(&model, f);

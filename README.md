@@ -16,3 +16,18 @@ cargo run --release --bin example_neural_differentiation $TYPE $OVERRIDE $MONOTO
 Here, `$TYPE` is either `scc` (smaller problem) or `full` (larger problem). `$OVERRIDE` is either `retain_hard` (keeps hard contraints as given in the observations file) or `override_soft` (overrides all hard constraints with soft ones). Finally, `$MONOTONIC` is the number of regulation constraints that should be retained (additional constraints are simply ignored).
 
  > For the `full` variant, `retain_hard` option always returns `unsat`. Only `override_soft` returns valid solutions. For the `scc` variant, both options should work, but can differ in computation time.
+
+### Prototype binary for benchmarking
+There are now two prototype (not fully tested yet) binaries to run the SMT-based inference on AEON file with a PSBN model and fixed point annotations. 
+
+Binary `smt_benchmarking_prototype` currently computes a single solution (that can be extracted and saved). Compile and run it using the command below, or use `--help` flag for more information on arguments and additional options (currently `verbose` & `output-path`).
+
+```
+cargo run --release --bin smt_benchmarking_prototype [OPTIONS] <MODEL_PATH> <SOLVER>
+```
+
+Binary `smt_benchmarking_prototype_multi` currently enumerates multiple solutions using a simple (and inefficient) blocking strategy. Compile and run it using the command below, or use `--help` flag for more information on arguments and additional options (currently `verbose` & `limit`).
+
+```
+cargo run --release --bin smt_benchmarking_prototype_multi [OPTIONS] <MODEL_PATH> <SOLVER> --limit <N>
+```

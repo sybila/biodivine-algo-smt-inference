@@ -1,10 +1,10 @@
-use biodivine_algo_smt_inference::{Dataset, loosen_specification};
-
 use biodivine_lib_param_bn::biodivine_std::traits::Set;
 use biodivine_lib_param_bn::fixed_points::FixedPoints;
 use biodivine_lib_param_bn::symbolic_async_graph::SymbolicAsyncGraph;
 use biodivine_lib_param_bn::{BooleanNetwork, VariableId};
 
+use biodivine_algo_smt_inference::deprecated::naive_inference::loosen_specification;
+use biodivine_algo_smt_inference::deprecated::observations::Dataset;
 use itertools::Itertools;
 use std::fs;
 
@@ -80,7 +80,9 @@ fn run_inference(
         // Iterate all N-combinations of indices to remove
         for ignore_set in indices.clone().into_iter().combinations(num_to_remove) {
             let loosened_dataset_spec = loosen_specification(dataset_spec, &ignore_set);
-            let current_spec = loosened_dataset_spec.to_specification_list(bn)?;
+            let dummy_weight = 0.5;
+            let current_spec =
+                loosened_dataset_spec.to_specification_list(bn, Some(dummy_weight))?;
 
             // Start with all colors, refine with fixed-point constraints
             let mut satisfying_colors = fixed_points.colors();
