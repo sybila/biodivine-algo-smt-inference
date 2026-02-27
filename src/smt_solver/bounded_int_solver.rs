@@ -1,11 +1,11 @@
 use crate::smt_solver::{
-    AbstractBoundedIntSolver, AbstractOptimizeSolver, AbstractSolver, extract_int_functions,
+    extract_int_functions, AbstractBoundedIntSolver, AbstractOptimizeSolver, AbstractSolver,
 };
 use anyhow::anyhow;
 use num_rational::BigRational;
 use std::collections::BTreeMap;
 use z3::ast::{Ast, Bool, Dynamic, Int};
-use z3::{DeclKind, FuncDecl, Model, SatResult};
+use z3::{FuncDecl, Model, SatResult};
 
 /// Initial implementation of [`AbstractBoundedIntSolver`] which actually uses `Int` values
 /// and additional assertions. Eventually, we may want to extend the bounded domains to
@@ -64,9 +64,10 @@ impl<SOLVER: AbstractSolver> AbstractBoundedIntSolver for BoundedIntSolver<SOLVE
         domain: Option<(u32, u32)>,
     ) -> Result<(), anyhow::Error> {
         if f.name().as_str() == "Int" {
-            // If `f` is an integer constant, ignore it.
-            // TODO: Is there a better way to handle this?
-            return Ok(())
+            // Users should not add assertions about integer value. Currently, I am not aware
+            // of any better way to identify whether `f` is an integer value or actual
+            // uninterpreted function.
+            return Err(anyhow!("You seem to be asserting that a constant value is a bounded `Int`."))
         }
 
         // Check that this is not a duplicate declaration:

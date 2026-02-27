@@ -8,7 +8,7 @@ use anyhow::anyhow;
 use biodivine_lib_param_bn::{BooleanNetwork, Regulation, RegulatoryGraph, VariableId};
 use log::info;
 use std::collections::BTreeMap;
-use z3::{FuncDecl, Model};
+use z3::{AstKind, FuncDecl, Model};
 
 /// A static collection of SMT formulas and declarations that are collectively used to
 /// actually encode an [`InferenceProblem`] into a solver query. Subsequently, this object
@@ -90,6 +90,12 @@ impl<'a, SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<'a,
             for (var, atom) in atoms {
                 let var_data = &problem[*var];
                 if var_data.is_int() {
+                    if atom.as_dyn_ref().kind() == AstKind::Numeral {
+                        // If observation propagation is enabled, some of these atoms could
+                        // be constants, in which case we don't want to assert their bounds.
+                        continue;
+                    }
+
                     let func = atom.as_dyn_ref().decl();
                     solver.declare_int(&func, Some(var_data.domain))?;
                 }
