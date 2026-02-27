@@ -1,6 +1,6 @@
 use biodivine_algo_smt_inference::StateSpecification;
 use biodivine_algo_smt_inference::bn_inference::constraints::{
-    StateHasWeightedObservation, StateIsFixedPoint,
+    StateHasExactObservation, StateHasWeightedObservation, StateIsFixedPoint,
 };
 use biodivine_algo_smt_inference::bn_inference::{InferenceProblem, InferenceProblemEncoder};
 use biodivine_algo_smt_inference::smt_solver::{
@@ -131,9 +131,15 @@ fn main() -> Result<(), anyhow::Error> {
     for (cell, spec) in observations.iter() {
         assert!(inference_problem.declare_state(cell.as_str()));
         let observation = spec.to_observation();
-        let obs_constraint = StateHasWeightedObservation::new(cell.as_str(), observation);
+        let hard_obs_constraint =
+            StateHasExactObservation::new(cell.as_str(), observation.only_exact_observations());
+        let soft_obs_constraint = StateHasWeightedObservation::new(
+            cell.as_str(),
+            observation.only_weighted_observations(),
+        );
         let fix_constraint = StateIsFixedPoint::new(cell.as_str());
-        inference_problem.assert_constraint(obs_constraint)?;
+        inference_problem.assert_constraint(hard_obs_constraint)?;
+        inference_problem.assert_constraint(soft_obs_constraint)?;
         inference_problem.assert_constraint(fix_constraint)?;
     }
 

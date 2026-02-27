@@ -36,65 +36,89 @@ impl StateObservation {
         self.values.len()
     }
 
-    /// Iterator over all observed values.
-    pub fn observations(&self) -> impl Iterator<Item = (VariableId, u32)> {
+    /// Iterator over all observed values, regardless of weight.
+    pub fn all_observations(&self) -> impl Iterator<Item = (VariableId, u32)> {
         self.values.iter().map(|(a, (b, _))| (*a, *b))
     }
 
     /// Iterator over all observed values and their weights.
-    pub fn weighted_observations(
+    pub fn all_observations_weighted(
         &self,
     ) -> impl Iterator<Item = (VariableId, u32, Option<BigRational>)> {
         self.values.iter().map(|(a, (b, c))| (*a, *b, c.clone()))
     }
+
+    /// Iterator over all exact observations, i.e., those without a weight.
+    pub fn only_exact_observations(&self) -> impl Iterator<Item = (VariableId, u32)> {
+        self.values.iter().filter_map(
+            |(a, (b, c))| {
+                if c.is_none() { Some((*a, *b)) } else { None }
+            },
+        )
+    }
+
+    /// Iterator over all weighted observations, i.e., those with a weight.
+    pub fn only_weighted_observations(
+        &self,
+    ) -> impl Iterator<Item = (VariableId, (u32, BigRational))> {
+        self.values
+            .iter()
+            .filter_map(|(a, (b, c))| c.clone().map(|weight| (*a, (*b, weight))))
+    }
 }
 
-/// Asserts that a state must exactly follow the given observation, ignoring any potential
-/// confidence coefficients (every value is treated as a "hard constraint").
+/// Asserts that a state must exactly follow the given observation.
 pub struct StateHasExactObservation {
     state: String,
-    observation: StateObservation,
+    observation: BTreeMap<VariableId, u32>,
 }
 
 /// Asserts that a state must follow the given observation, using soft constraints to model
-/// observations that have some confidence coefficient. Consequently, this constraint can only
-/// be used with instances of [`AbstractOptimizeSolver`].
+/// observation weight. Consequently, this constraint can only be used with instances
+/// of [`AbstractOptimizeSolver`].
 pub struct StateHasWeightedObservation {
     state: String,
-    observation: StateObservation,
+    observation: BTreeMap<VariableId, (u32, BigRational)>,
 }
 
 impl StateHasExactObservation {
-    pub fn new(state: &str, observation: StateObservation) -> Self {
+    pub fn new(state: &str, values: impl Iterator<Item = (VariableId, u32)>) -> Self {
         Self {
             state: state.to_string(),
-            observation,
+            observation: BTreeMap::from_iter(values),
         }
+    }
+
+    pub fn len(&self) -> usize {
+        self.observation.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.observation.is_empty()
     }
 
     pub fn state(&self) -> &str {
         &self.state
     }
 
-    pub fn observation(&self) -> &StateObservation {
-        &self.observation
+    pub fn observations(&self) -> impl Iterator<Item = (VariableId, u32)> {
+        self.observation.clone().into_iter()
     }
 }
 
 impl StateHasWeightedObservation {
-    pub fn new(state: &str, observation: StateObservation) -> Self {
+    pub fn new(
+        state: &str,
+        values: impl Iterator<Item = (VariableId, (u32, BigRational))>,
+    ) -> Self {
         Self {
             state: state.to_string(),
-            observation,
+            observation: BTreeMap::from_iter(values),
         }
     }
 
     pub fn state(&self) -> &str {
         &self.state
-    }
-
-    pub fn observation(&self) -> &StateObservation {
-        &self.observation
     }
 }
 
@@ -102,7 +126,7 @@ impl<SOLVER: AbstractSolver + 'static> InferenceConstraint<SOLVER> for StateHasE
     /// Ensure that the state exists and all variable values are valid within their domain.
     fn validate(&self, problem: &InferenceProblem<SOLVER>) -> Result<(), Error> {
         check_state_exists(problem, self.state.as_str())?;
-        check_state_observation(problem, &self.observation)?;
+        check_state_observation(problem, self.observation.clone().into_iter())?;
         Ok(())
     }
 
@@ -113,9 +137,11 @@ impl<SOLVER: AbstractSolver + 'static> InferenceConstraint<SOLVER> for StateHasE
     ) -> Result<(), Error> {
         // Assert that all state atoms have the values they are expected to have.
         info!("Asserting: state `{}` has exact observation.", self.state);
-        for (variable, observation) in self.observation.observations() {
-            let atom = encoder.state_atom(&self.state, variable);
-            let value = encoder.problem[variable].ast_type().new_value(observation);
+        for (variable, observation) in self.observation.iter() {
+            let atom = encoder.state_atom(&self.state, *variable);
+            let value = encoder.problem[*variable]
+                .ast_type()
+                .new_value(*observation);
             debug!(
                 "Asserting: `{variable:?}` is fixed to `{value}` by observation in state `{}`.",
                 self.state
@@ -131,7 +157,10 @@ impl<SOLVER: AbstractOptimizeSolver + 'static> InferenceConstraint<SOLVER>
 {
     fn validate(&self, problem: &InferenceProblem<SOLVER>) -> Result<(), Error> {
         check_state_exists(problem, self.state.as_str())?;
-        check_state_observation(problem, &self.observation)?;
+        check_state_observation(
+            problem,
+            self.observation.iter().map(|(var, (val, _))| (*var, *val)),
+        )?;
         Ok(())
     }
 
@@ -146,22 +175,16 @@ impl<SOLVER: AbstractOptimizeSolver + 'static> InferenceConstraint<SOLVER>
             "Asserting: state `{}` has weighted observation.",
             self.state
         );
-        for (variable, observation, weight) in self.observation.weighted_observations() {
-            let atom = encoder.state_atom(&self.state, variable);
-            let value = encoder.problem[variable].ast_type().new_value(observation);
-            if let Some(weight) = weight {
-                debug!(
-                    "Asserting: `{variable:?}` is fixed to `{value}` with weight {weight} by observation in state `{}`.",
-                    self.state
-                );
-                solver.assert_soft(&atom.eq(&value)?, weight);
-            } else {
-                debug!(
-                    "Asserting: `{variable:?}` is fixed to `{value}` by observation in state `{}`.",
-                    self.state
-                );
-                solver.assert(&atom.eq(&value)?);
-            }
+        for (variable, (observation, weight)) in self.observation.iter() {
+            let atom = encoder.state_atom(&self.state, *variable);
+            let value = encoder.problem[*variable]
+                .ast_type()
+                .new_value(*observation);
+            debug!(
+                "Asserting: `{variable:?}` is fixed to `{value}` with weight {weight} by observation in state `{}`.",
+                self.state
+            );
+            solver.assert_soft(&atom.eq(&value)?, weight.clone());
         }
         Ok(())
     }

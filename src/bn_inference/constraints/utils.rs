@@ -1,5 +1,4 @@
 use crate::bn_inference::InferenceProblem;
-use crate::bn_inference::constraints::StateObservation;
 use crate::bn_inference::inference_problem::VariableData;
 use anyhow::anyhow;
 use biodivine_lib_param_bn::VariableId;
@@ -55,9 +54,9 @@ pub fn check_variable_domain<S: 'static>(
 
 pub fn check_state_observation<S: 'static>(
     problem: &InferenceProblem<S>,
-    observation: &StateObservation,
+    observation: impl Iterator<Item = (VariableId, u32)>,
 ) -> Result<(), anyhow::Error> {
-    for (variable, observation) in observation.observations() {
+    for (variable, observation) in observation {
         check_variable_domain(problem, variable, observation)?;
     }
     Ok(())

@@ -63,13 +63,13 @@ impl<'a, SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<'a,
                         .state_atoms
                         .get_mut(constraint.state())
                         .expect("Unreachable: State must exist.");
-                    for (var, val) in constraint.observation().observations() {
+                    for (var, val) in constraint.observations() {
                         let val_const = problem[var].ast_type().new_value(val);
                         atoms.insert(var, val_const);
                     }
                     info!(
-                        "Propagated {}/{} atoms for state {}.",
-                        constraint.observation().size(),
+                        "Propagated {}/{} atoms in state `{}`.",
+                        constraint.len(),
                         atoms.len(),
                         constraint.state()
                     );

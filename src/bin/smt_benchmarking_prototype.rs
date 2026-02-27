@@ -99,7 +99,9 @@ fn main() -> Result<(), anyhow::Error> {
             })
             .collect::<Vec<_>>();
         let observation = StateObservation::from_exact(observation);
-        let obs_constraint = StateHasExactObservation::new(name.as_str(), observation);
+        // Here, we ignore observation weights and just assert them all as hard constraints:
+        let obs_constraint =
+            StateHasExactObservation::new(name.as_str(), observation.all_observations());
         let fix_constraint = StateIsFixedPoint::new(name.as_str());
         inference_problem.assert_constraint(obs_constraint)?;
         inference_problem.assert_constraint(fix_constraint)?;
