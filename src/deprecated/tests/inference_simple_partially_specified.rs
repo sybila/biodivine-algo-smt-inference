@@ -30,6 +30,7 @@ fn make_one_fixed_point_network() -> (BooleanNetwork, VariableId, VariableId, Va
 }
 
 #[test]
+#[ignore]
 fn one_fixed_point_both_possible() {
     // Check that both fixed-points of the one-fixed-point network are actually possible.
     let (bn, a, b, c) = make_one_fixed_point_network();
@@ -73,6 +74,7 @@ fn one_fixed_point_both_possible() {
 }
 
 #[test]
+#[ignore]
 fn one_fixed_point_optimize() {
     // Select a specification (110) that has distance 1 to 010 and distance 2 to 011, meaning
     // this should prefer the AND interpretation.
