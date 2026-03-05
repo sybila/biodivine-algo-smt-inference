@@ -23,10 +23,16 @@ impl IntFunction {
         self.terms.remove(&0);
     }
 
-    /// Remove duplicate clauses from this [`IntFunction`].
+    /// Remove duplicate clauses from this [`IntFunction`] and ensure all clauses list atoms
+    /// in an increasing order.
     pub fn remove_duplicates(&mut self) {
         for clauses in self.terms.values_mut() {
             let deduplicated = BTreeSet::from_iter(clauses.clone());
+            if deduplicated.contains(&Vec::new()) {
+                // If the result contains an empty clause, that empty clause is a tautology,
+                // and we can just remove everything except for that empty clause.
+                *clauses = vec![Vec::new()];
+            }
             *clauses = Vec::from_iter(deduplicated.into_iter().map(|mut clause| {
                 clause.sort();
                 clause
@@ -36,6 +42,10 @@ impl IntFunction {
 
     /// Eliminate all atoms that are universally true assuming the specified argument
     /// only falls within the given range of values.
+    ///
+    /// Note that this operation can also leave the function with many duplicated clauses
+    /// (since multiple clauses simplify to the same clauses). These can be explicitly
+    /// removed using [`Self::remove_duplicates`].
     pub fn clamp_argument(&mut self, arg_index: usize, domain: (u32, u32)) {
         for clauses in self.terms.values_mut() {
             for clause in clauses.iter_mut() {
@@ -49,7 +59,6 @@ impl IntFunction {
                     }
                 })
             }
-            clauses.retain(|clause| !clause.is_empty());
         }
     }
 

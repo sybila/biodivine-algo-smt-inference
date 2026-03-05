@@ -27,8 +27,7 @@ pub fn extract_function_applications(fml: &Bool) -> HashSet<Dynamic> {
 
         // Check if the expression is a non-trivial uninterpreted function application, and if so,
         // save it.
-        if expr.num_children() > 0 && expr.is_app() && expr.decl().kind() == DeclKind::UNINTERPRETED
-        {
+        if expr.is_app() && expr.decl().kind() == DeclKind::UNINTERPRETED {
             results.insert(expr.clone());
         }
     }
