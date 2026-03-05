@@ -177,8 +177,11 @@ fn main() -> Result<(), anyhow::Error> {
     }
 
     // Print 1/0 as the last piece of output:
-    let res = if result == SatResult::Sat { 1 } else { 0 };
-    println!("{}", res);
+    match result {
+        SatResult::Unsat => println!("0"),
+        SatResult::Unknown => println!("?"),
+        SatResult::Sat => println!("1"),
+    }
 
     Ok(())
 }
