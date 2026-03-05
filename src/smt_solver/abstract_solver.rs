@@ -15,6 +15,7 @@ pub trait AbstractSolver {
     fn check(&mut self) -> SatResult;
     fn get_model(&self) -> Option<Model>;
     fn get_assertions(&self) -> Vec<Bool>;
+    fn reinitialize(&mut self);
 
     /// Identify all points (input combinations) that are exactly determined by the current
     /// solver query in the provided model and place them into an [`IntFunction`].
@@ -65,6 +66,13 @@ impl AbstractSolver for z3::Solver {
     fn get_assertions(&self) -> Vec<Bool> {
         z3::Solver::get_assertions(self)
     }
+    fn reinitialize(&mut self) {
+        let new_solver = z3::Solver::new();
+        for assertion in self.get_assertions() {
+            new_solver.assert(&assertion);
+        }
+        *self = new_solver;
+    }
 }
 
 impl AbstractSolver for z3::Optimize {
@@ -83,5 +91,15 @@ impl AbstractSolver for z3::Optimize {
 
     fn get_assertions(&self) -> Vec<Bool> {
         z3::Optimize::get_assertions(self)
+    }
+
+    fn reinitialize(&mut self) {
+        // Right now, optimize solver cannot be reinitialized because we don't
+        // have a method to get weights of soft assertions.
+        // Technically, we might be able to do this by migrating optimization objectives
+        // to the new solver, but I'm not sure that's correct.
+        // Another alternative would be to make a wrapper around Optimize
+        // that will track the weights manually and re-initialize itself based on that.
+        unimplemented!();
     }
 }

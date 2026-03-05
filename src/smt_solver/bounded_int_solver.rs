@@ -11,7 +11,7 @@ use z3::{FuncDecl, Model, SatResult};
 /// and additional assertions. Eventually, we may want to extend the bounded domains to
 /// bit-vectors or other types as well.
 pub struct BoundedIntSolver<SOLVER: AbstractSolver> {
-    inner: SOLVER,
+    pub inner: SOLVER,
     /// Indicates whether it is allowed to use undeclared functions. If `false`, every `Int`
     /// uninterpreted function has to be declared before first use.
     allow_undeclared: bool,
@@ -107,6 +107,10 @@ impl<SOLVER: AbstractSolver> AbstractSolver for BoundedIntSolver<SOLVER> {
 
     fn get_assertions(&self) -> Vec<Bool> {
         self.inner.get_assertions()
+    }
+
+    fn reinitialize(&mut self) {
+        self.inner.reinitialize();
     }
 }
 

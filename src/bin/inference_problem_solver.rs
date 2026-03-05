@@ -31,6 +31,15 @@ struct Arguments {
     #[clap(long, default_value = "true")]
     boolean_quantifier_optimization: Option<bool>,
 
+    /// When lazy instantiation is enabled, this option enforces that a fresh solver is used
+    /// for every iteration. This is typically *worse* than reusing an existing solver (hence
+    /// the option is off by default). However, in rare cases it can be helpful to reset
+    /// the solver state between iterations.
+    ///
+    /// For other solvers, the option is ignored.
+    #[clap(long, default_value = "false")]
+    force_lazy_reinitialization: Option<bool>,
+
     /// Automatically propagates exact state observations, simplifying the SMT query
     #[clap(long, default_value = "true")]
     propagate_observations: Option<bool>,
@@ -99,7 +108,10 @@ fn main() -> Result<(), anyhow::Error> {
             args.boolean_quantifier_optimization.unwrap_or(true),
         )),
         "instantiated-eager" => Box::new(InstantiatedMonotoneSolver::new(base_solver)),
-        "instantiated-lazy" => Box::new(InstantiatedMonotoneSolver::new_lazy(base_solver)),
+        "instantiated-lazy" => Box::new(InstantiatedMonotoneSolver::new_lazy(
+            base_solver,
+            args.force_lazy_reinitialization.unwrap_or(false),
+        )),
         _ => panic!("Unknown solver: {}", args.solver),
     };
 

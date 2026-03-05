@@ -321,6 +321,10 @@ impl<INNER: AbstractSolver> AbstractSolver for QuantifiedMonotoneSolver<INNER> {
     fn get_assertions(&self) -> Vec<Bool> {
         self.inner.get_assertions()
     }
+
+    fn reinitialize(&mut self) {
+        self.inner.reinitialize();
+    }
 }
 
 impl<INNER: AbstractOptimizeSolver> AbstractOptimizeSolver for QuantifiedMonotoneSolver<INNER> {

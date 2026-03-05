@@ -17,6 +17,12 @@ pub struct InstantiatedMonotoneSolver<INNER: AbstractSolver> {
     inner: INNER,
     /// Indicates that the solver should add monotonicity lemmas lazily during solving.
     lazy_lemma_creation: bool,
+    /// Indicate that when doing lazy lemma creation, the solver should re-initialize itself
+    /// after each iteration to clean up the stale solver state.
+    ///
+    /// Note that in most instances, this should not be necessary and should not improve
+    /// performance, but there can be edge cases where reinitialization does help.
+    force_lazy_reinitialization: bool,
     /// Indicates which functions appeared in existing assertions (monotonicity must be declared
     /// before the function is first used).
     has_asserted: HashSet<FunctionName>,
@@ -215,15 +221,20 @@ impl<INNER: AbstractSolver> InstantiatedMonotoneSolver<INNER> {
             has_asserted: HashSet::new(),
             lazy_lemma_creation: false,
             function_info: HashMap::new(),
+            force_lazy_reinitialization: false,
         }
     }
 
-    pub fn new_lazy(inner: INNER) -> InstantiatedMonotoneSolver<INNER> {
+    pub fn new_lazy(
+        inner: INNER,
+        force_reinitialization: bool,
+    ) -> InstantiatedMonotoneSolver<INNER> {
         InstantiatedMonotoneSolver {
             inner,
             has_asserted: HashSet::new(),
             lazy_lemma_creation: true,
             function_info: HashMap::new(),
+            force_lazy_reinitialization: force_reinitialization,
         }
     }
 
@@ -375,6 +386,10 @@ impl<INNER: AbstractSolver> AbstractSolver for InstantiatedMonotoneSolver<INNER>
                     "Result is spurious. Generated {created_lemmas} additional monotonicity lemmas. Total lemmas: {}.",
                     self.count_used_lemmas()
                 );
+
+                if self.force_lazy_reinitialization {
+                    self.reinitialize();
+                }
             }
         }
     }
@@ -385,6 +400,10 @@ impl<INNER: AbstractSolver> AbstractSolver for InstantiatedMonotoneSolver<INNER>
 
     fn get_assertions(&self) -> Vec<Bool> {
         self.inner.get_assertions()
+    }
+
+    fn reinitialize(&mut self) {
+        self.inner.reinitialize();
     }
 }
 
