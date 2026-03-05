@@ -1,5 +1,6 @@
 use crate::smt_solver::typed_ast::AstType;
 use anyhow::anyhow;
+use linked_hash_set::LinkedHashSet;
 use std::collections::HashSet;
 use z3::ast::{Ast, Bool, Dynamic, Int};
 use z3::{DeclKind, FuncDecl, Model};
@@ -8,9 +9,9 @@ use z3::{DeclKind, FuncDecl, Model};
 /// only allowed to use `Int` and `Bool` functions.
 ///
 /// TODO: For now, this is ignoring usages that appear inside quantifiers...
-pub fn extract_function_applications(fml: &Bool) -> HashSet<Dynamic> {
+pub fn extract_function_applications(fml: &Bool) -> LinkedHashSet<Dynamic> {
     let mut todo = vec![Dynamic::from_ast(fml)];
-    let mut results: HashSet<Dynamic> = HashSet::new();
+    let mut results: LinkedHashSet<Dynamic> = LinkedHashSet::new();
     let mut seen: HashSet<Dynamic> = HashSet::new();
 
     while let Some(expr) = todo.pop() {
@@ -28,7 +29,7 @@ pub fn extract_function_applications(fml: &Bool) -> HashSet<Dynamic> {
         // Check if the expression is a non-trivial uninterpreted function application, and if so,
         // save it.
         if expr.is_app() && expr.decl().kind() == DeclKind::UNINTERPRETED {
-            results.insert(expr.clone());
+            results.insert(expr);
         }
     }
 
@@ -38,9 +39,9 @@ pub fn extract_function_applications(fml: &Bool) -> HashSet<Dynamic> {
 /// Extract all uninterpreted function usages (including zero-arity constants) of type `Int`.
 ///
 /// TODO: For now, this is ignoring usages that appear inside quantifiers...
-pub fn extract_int_functions(fml: &Bool) -> HashSet<Int> {
+pub fn extract_int_functions(fml: &Bool) -> LinkedHashSet<Int> {
     let mut todo = vec![Dynamic::from_ast(fml)];
-    let mut results: HashSet<Int> = HashSet::new();
+    let mut results: LinkedHashSet<Int> = LinkedHashSet::new();
     let mut seen: HashSet<Dynamic> = HashSet::new();
 
     while let Some(expr) = todo.pop() {
@@ -54,7 +55,7 @@ pub fn extract_int_functions(fml: &Bool) -> HashSet<Int> {
             }
         }
 
-        // Check if the expression is an uninterpreted function application and has type `Int`:
+        // Check if the expression is an uninterpreted function application and has the type `Int`:
         if expr.is_app()
             && expr.decl().kind() == DeclKind::UNINTERPRETED
             && let Some(expr) = expr.as_int()

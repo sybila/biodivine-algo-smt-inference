@@ -5,9 +5,10 @@ use crate::smt_solver::{
     model_eval_int_function,
 };
 use anyhow::anyhow;
+use linked_hash_set::LinkedHashSet;
 use log::{debug, info};
 use num_rational::BigRational;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use z3::ast::{Ast, Bool, Dynamic};
 use z3::{FuncDecl, Model, SatResult};
 
@@ -25,8 +26,8 @@ pub struct InstantiatedMonotoneSolver<INNER: AbstractSolver> {
     force_lazy_reinitialization: bool,
     /// Indicates which functions appeared in existing assertions (monotonicity must be declared
     /// before the function is first used).
-    has_asserted: HashSet<FunctionName>,
-    function_info: HashMap<FunctionName, FunctionMonotonicityData>,
+    has_asserted: BTreeSet<FunctionName>,
+    function_info: BTreeMap<FunctionName, FunctionMonotonicityData>,
 }
 
 /// Stores internal info about monotonicity properties related to one of the uninterpreted
@@ -42,7 +43,7 @@ struct FunctionMonotonicityData {
     // Stores function arguments that are declared as monotone.
     arguments: BTreeMap<usize, Monotonicity>,
     // Stores all unique usages of every function (should all be the same type).
-    occurrences: HashSet<TypedAst>,
+    occurrences: LinkedHashSet<TypedAst>,
     // Remembers all monotonicity lemmas already asserted for a given function.
     lemmas: Vec<Bool>,
 }
@@ -162,7 +163,7 @@ impl FunctionMonotonicityData {
     ) -> usize {
         // First, build a table which holds the evaluated arguments and their output for each
         // known function application.
-        let mut table: HashMap<u32, HashMap<Vec<u32>, Vec<TypedAst>>> = HashMap::new();
+        let mut table: BTreeMap<u32, BTreeMap<Vec<u32>, Vec<TypedAst>>> = BTreeMap::new();
 
         for app in self.occurrences.iter() {
             let dynamic = Dynamic::from_ast(app.as_dyn_ref());
@@ -218,9 +219,9 @@ impl<INNER: AbstractSolver> InstantiatedMonotoneSolver<INNER> {
     pub fn new(inner: INNER) -> InstantiatedMonotoneSolver<INNER> {
         InstantiatedMonotoneSolver {
             inner,
-            has_asserted: HashSet::new(),
+            has_asserted: BTreeSet::new(),
             lazy_lemma_creation: false,
-            function_info: HashMap::new(),
+            function_info: BTreeMap::new(),
             force_lazy_reinitialization: false,
         }
     }
@@ -231,9 +232,9 @@ impl<INNER: AbstractSolver> InstantiatedMonotoneSolver<INNER> {
     ) -> InstantiatedMonotoneSolver<INNER> {
         InstantiatedMonotoneSolver {
             inner,
-            has_asserted: HashSet::new(),
+            has_asserted: BTreeSet::new(),
             lazy_lemma_creation: true,
-            function_info: HashMap::new(),
+            function_info: BTreeMap::new(),
             force_lazy_reinitialization: force_reinitialization,
         }
     }
@@ -285,7 +286,7 @@ impl<INNER: AbstractSolver> InstantiatedMonotoneSolver<INNER> {
                 name: name.clone(),
                 signature: (domain, range),
                 arguments: BTreeMap::new(),
-                occurrences: HashSet::new(),
+                occurrences: LinkedHashSet::new(),
                 lemmas: Vec::new(),
             }))
     }

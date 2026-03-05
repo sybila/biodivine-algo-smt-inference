@@ -5,7 +5,7 @@ use crate::smt_solver::{
 };
 use anyhow::anyhow;
 use num_rational::BigRational;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use z3::ast::{Ast, Bool, Dynamic, forall_const};
 use z3::{FuncDecl, Model, SatResult};
 
@@ -16,15 +16,15 @@ pub struct QuantifiedMonotoneSolver<INNER: AbstractSolver> {
     optimize_boolean_quantifiers: bool,
     /// When not `None`, the solver will emit a single quantified assertion for each function
     /// instead of emitting a separate assertion for individual monotonicity constraints.
-    /// The solver uses this hash set to identify functions that already have their monotonicity
+    /// The solver uses this set to identify functions that already have their monotonicity
     /// asserted and thus do not need new assertions.
-    merged_monotonicity_constraints: Option<HashSet<String>>,
+    merged_monotonicity_constraints: Option<BTreeSet<String>>,
     /// Indicates which functions appeared in existing assertions (monotonicity must be declared
     /// before the function is first used). We are saving the whole declaration, not just the name,
     /// because we have to take the declaration from somewhere before creating the
     /// merged constraint.
-    has_asserted: HashMap<String, FuncDecl>,
-    function_info: HashMap<String, BTreeMap<usize, Monotonicity>>,
+    has_asserted: BTreeMap<String, FuncDecl>,
+    function_info: BTreeMap<String, BTreeMap<usize, Monotonicity>>,
 }
 
 impl<INNER: AbstractSolver> QuantifiedMonotoneSolver<INNER> {
@@ -35,8 +35,8 @@ impl<INNER: AbstractSolver> QuantifiedMonotoneSolver<INNER> {
             inner,
             optimize_boolean_quantifiers,
             merged_monotonicity_constraints: None,
-            has_asserted: HashMap::new(),
-            function_info: HashMap::new(),
+            has_asserted: BTreeMap::new(),
+            function_info: BTreeMap::new(),
         }
     }
 
@@ -46,9 +46,9 @@ impl<INNER: AbstractSolver> QuantifiedMonotoneSolver<INNER> {
         Self {
             inner,
             optimize_boolean_quantifiers,
-            merged_monotonicity_constraints: Some(HashSet::new()),
-            has_asserted: HashMap::new(),
-            function_info: HashMap::new(),
+            merged_monotonicity_constraints: Some(BTreeSet::new()),
+            has_asserted: BTreeMap::new(),
+            function_info: BTreeMap::new(),
         }
     }
 
@@ -292,8 +292,8 @@ impl Default for QuantifiedMonotoneSolver<z3::Solver> {
             inner: z3::Solver::new(),
             optimize_boolean_quantifiers: true,
             merged_monotonicity_constraints: None,
-            function_info: HashMap::new(),
-            has_asserted: HashMap::new(),
+            function_info: BTreeMap::new(),
+            has_asserted: BTreeMap::new(),
         }
     }
 }
