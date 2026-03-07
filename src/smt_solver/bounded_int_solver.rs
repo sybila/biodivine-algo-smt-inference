@@ -3,7 +3,7 @@ use crate::smt_solver::{
 };
 use anyhow::anyhow;
 use num_rational::BigRational;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use z3::ast::{Ast, Bool, Dynamic, Int};
 use z3::{FuncDecl, Model, SatResult};
 
@@ -16,6 +16,9 @@ pub struct BoundedIntSolver<SOLVER: AbstractSolver> {
     /// uninterpreted function has to be declared before first use.
     allow_undeclared: bool,
     declarations: BTreeMap<String, Option<(u32, u32)>>,
+    /// A set of all occurrences of a function for which the bounds are already asserted,
+    /// meaning there is no need to repeat the assertion.
+    bounds_asserted: BTreeMap<String, HashSet<Int>>,
 }
 
 impl<SOLVER: AbstractSolver> BoundedIntSolver<SOLVER> {
@@ -24,6 +27,7 @@ impl<SOLVER: AbstractSolver> BoundedIntSolver<SOLVER> {
             inner,
             allow_undeclared,
             declarations: Default::default(),
+            bounds_asserted: Default::default(),
         }
     }
 
@@ -32,6 +36,7 @@ impl<SOLVER: AbstractSolver> BoundedIntSolver<SOLVER> {
             inner,
             allow_undeclared: false,
             declarations: Default::default(),
+            bounds_asserted: Default::default(),
         }
     }
 
@@ -47,10 +52,14 @@ impl<SOLVER: AbstractSolver> BoundedIntSolver<SOLVER> {
             } else if let Some(domain) = domain
                 && let Some((min, max)) = domain
             {
-                self.inner
-                    .assert(&int_function.le(Int::from_u64(u64::from(*max))));
-                self.inner
-                    .assert(&int_function.ge(Int::from_u64(u64::from(*min))));
+                // Check if the assertion was already introduced
+                let already_asserted = self.bounds_asserted.entry(name).or_default();
+                if already_asserted.insert(int_function.clone()) {
+                    self.inner
+                        .assert(&int_function.le(Int::from_u64(u64::from(*max))));
+                    self.inner
+                        .assert(&int_function.ge(Int::from_u64(u64::from(*min))));
+                }
             } // else: The function is declared but unbounded.
             // Undeclared functions are otherwise skipped.
         }
