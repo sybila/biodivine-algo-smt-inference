@@ -1,29 +1,45 @@
 # SMT inference of Boolean networks from uncertain data
 
-Work in progress...
+This repository implements a prototype tool for inference of logic-based models (Boolean and Thomas networks) from biological observations. Internally, the tool uses SMT and uninterpreted functions to encode the properties of the desired model into a query processed by the Z3 solver. The project also provides standalone solvers that wrap the existing Z3 API and extend it with support for monotonic function arguments and bounded integers (see also the [architecture diagram](./ARCHITECTURE_DIAGRAM.png)).
 
-### Benchmarking binary (hard constraints, single solution)
+### Exact inference solver
 
-There is now binary `inference_problem_solver` for benchmarking the SMT strategies on boolean (and multi-valued) network inference with hard constraints. It takes an AEON model file containing a regulatory graph (including monotonicity/essentiality constraints) complemented with fixed points specification in model annotations. If the model is multi-valued, there should also be additional annotations specifying maximal values of each variable.  
+To build the main binary, make sure you have Rust toolchain installed, then run `cargo build --release --bin inference_problem_solver`. The resulting binary should be located in `./target/release/`.
 
-The binary runs a selected solver strategy and computes a single solution. By default, it prints 0/1/? on standard output to signify whether the z3 determined the input was SAT/UNSAT/UNKNOWN. The resulting model can be fully extracted and saved (for boolean cases) or printed.
-
-Compile and run it using the command below. Use option `--solver` to choose a strategy, which can be one of `instantiated-eager` (default), `instantiated-lazy`, `quantified-individual`, `quantified-merge`. You can use `--help` flag for more information on arguments and additional options (such as `output-path`, `verbose`, and various optimization flags).
-
+Alternatively, you can also directly run the solver using:
 ```
-cargo run --release --bin inference_problem_solver [OPTIONS] <MODEL_PATH>
+cargo run --release --bin inference_problem_solver -- [OPTIONS] <INPUT_PATH>
 ```
 
-### How to run optimization
+Use `--help` to list the available options. The input file is an `.aeon` model file containing desired regulations of the influence graph, interpreted as follows:
 
-There is currently one "large benchmark" based on neural cell differentiation. The benchmark has two variants: Smaller "scc" variant (only covers strongly connected component of transcription factors; 308 genes) and "full" variant (also includes various network "outputs"; 8379 genes). Both variants have some soft and hard observations based on a real scRNA-seq dataset. However, the hard observations are not satisfiable in the "full" variant; therefore, we also allow overriding all hard constraints with soft ones (using a high weight). Finally, since the number of monotonic regulation constraints has a strong impact on runtime, you can set how many of them should be "retained" (the rest will be ignored).
-
-To run the benchmark, use:
-
-```bash
-cargo run --release --bin example_neural_differentiation $TYPE $OVERRIDE $MONOTONIC
+```
+# Essential activation
+a -> b
+# Essential inhibition
+a -| b
+# Essential without monotonicity
+a -? b
+# Non-essential activation / inhibition
+a ->? b
+a -|? b
+# Non-essential without monotonicity
+a -?? b
 ```
 
-Here, `$TYPE` is either `scc` (smaller problem) or `full` (larger problem). `$OVERRIDE` is either `retain_hard` (keeps hard contraints as given in the observations file) or `override_soft` (overrides all hard constraints with soft ones). Finally, `$MONOTONIC` is the number of regulation constraints that should be retained (additional constraints are simply ignored).
+Any update function in the `.aeon` file are ignored. To specify desired fixed-points, use model annotations as follows:
 
- > For the `full` variant, `retain_hard` option always returns `unsat`. Only `override_soft` returns valid solutions. For the `scc` variant, both options should work, but can differ in computation time.
+```
+# Enforces existence of fixed point with ID "1" and variable assignment a=1, b=0, c=1. 
+# Unused variables are left unconstrained. 
+#!fix:1:#`{"a": 1, "b": 0, "c": 1}`#
+```
+
+To specify that a variable is multivalued, you have to explicitly declare its domain as follows:
+
+```
+# Domain of variable with name "v93" is [0,1,2]. 
+#!variable:v93:max_value:2
+```
+
+By default, the solver only prints `0/1/?` to indicate that the query is SAT/UNSAT/UNKNOWN. If the model is Boolean, you can print it to a file using `--output-path`. For Boolean and multivalued models, you can also print the update rules directly using a proprietary format with `--print-update-rules`. Use option `--solver` to choose a strategy, which can be one of `instantiated-eager` (default), `instantiated-lazy`, `quantified-individual`, `quantified-merge`.
