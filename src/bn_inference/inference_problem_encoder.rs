@@ -1,13 +1,14 @@
 use crate::bn_inference::InferenceProblem;
 use crate::bn_inference::constraints::StateHasExactObservation;
-use crate::smt_solver::typed_ast::{MapDynAst, TypedAst};
+use crate::smt_solver::typed_ast::{AstType, MapDynAst, TypedAst};
 use crate::smt_solver::{
-    AbstractBoundedIntSolver, AbstractMonotoneSolver, AbstractSolver, IntFunction,
+    AbstractBoundedIntSolver, AbstractMonotoneSolver, AbstractSolver, IntFunction, model_eval_int,
 };
 use anyhow::anyhow;
 use biodivine_lib_param_bn::{BooleanNetwork, Regulation, RegulatoryGraph, VariableId};
 use log::info;
 use std::collections::BTreeMap;
+use z3::ast::{Bool, Dynamic, Int};
 use z3::{AstKind, FuncDecl, Model};
 
 /// A static collection of SMT formulas and declarations that are collectively used to
@@ -196,6 +197,65 @@ impl<'a, SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<'a, SOLVER> {
         // Make the function call and wrap it into `TypedAst`.
         let function_call = function.apply(&args.iter().dyn_vec());
         TypedAst::cast_dynamic(variable.ast_type(), function_call)
+    }
+
+    /// Extract the state map inferred for the given named state.
+    pub fn decode_state_map(&self, state: &str, model: &Model) -> BTreeMap<VariableId, usize> {
+        self.state_atoms
+            .get(state)
+            .unwrap_or_else(|| panic!("Unknown state `{state}`."))
+            .iter()
+            .map(|(variable, ast)| {
+                let dynamic = Dynamic::from_ast(ast.as_dyn_ref());
+                (*variable, model_eval_int(&dynamic, model) as usize)
+            })
+            .collect()
+    }
+
+    /// Extract the state inferred for the given named state.
+    pub fn decode_state(&self, state: &str, model: &Model) -> Vec<usize> {
+        self.state_atoms
+            .get(state)
+            .unwrap_or_else(|| panic!("Unknown state `{state}`."))
+            .values()
+            .map(|ast| {
+                let dynamic = Dynamic::from_ast(ast.as_dyn_ref());
+                model_eval_int(&dynamic, model) as usize
+            })
+            .collect()
+    }
+
+    /// Generate a formula blocking the current assignment to fixed-point state variables.
+    ///
+    /// Asserting this prevents the solver from returning the exact same assignment to all
+    /// variables in the fixed-point states.
+    pub fn generate_fixed_point_blocker(&self, model: &Model) -> Result<Bool, anyhow::Error> {
+        let mut eq_atoms: Vec<Bool> = Vec::new();
+
+        // For each state, extract the SMT variable values and create equalities
+        for state_map in self.state_atoms.values() {
+            for var_atom in state_map.values() {
+                let dynamic = Dynamic::from_ast(var_atom.as_dyn_ref());
+                let model_value = model_eval_int(&dynamic, model) as u64;
+                let ast_model_value = match var_atom.ast_type() {
+                    AstType::Int => TypedAst::from(Int::from_u64(model_value)),
+                    AstType::Bool => {
+                        assert!(model_value <= 1);
+                        TypedAst::from(Bool::from_bool(model_value == 1))
+                    }
+                };
+                eq_atoms.push(var_atom.eq(&ast_model_value)?);
+            }
+        }
+
+        if eq_atoms.is_empty() {
+            return Err(anyhow!("No state variables to block".to_string()));
+        }
+
+        // Create conj of all equalities matching the current model
+        // Negate the conjunction to block it
+        let constraint = Bool::and(&eq_atoms.iter().collect::<Vec<_>>());
+        Ok(constraint.not())
     }
 }
 

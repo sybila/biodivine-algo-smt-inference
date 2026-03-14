@@ -8,3 +8,6 @@ mod inference_constraint;
 pub use inference_constraint::InferenceConstraint;
 
 pub mod constraints;
+
+mod inference_solution_iterator;
+pub use inference_solution_iterator::{BlockingStrategy, InferenceSolutionIterator};

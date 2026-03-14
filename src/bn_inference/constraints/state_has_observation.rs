@@ -24,6 +24,18 @@ impl StateObservation {
         }
     }
 
+    pub fn from_uniformly_weighted(
+        values: impl IntoIterator<Item = (VariableId, u32)>,
+        weight: BigRational,
+    ) -> Self {
+        StateObservation {
+            values: values
+                .into_iter()
+                .map(|(k, v)| (k, (v, Some(weight.clone()))))
+                .collect(),
+        }
+    }
+
     pub fn from_weighted(
         values: impl IntoIterator<Item = (VariableId, (u32, Option<BigRational>))>,
     ) -> Self {
