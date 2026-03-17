@@ -5,7 +5,7 @@ use anyhow::anyhow;
 use num_rational::BigRational;
 use std::collections::{BTreeMap, HashSet};
 use z3::ast::{Ast, Bool, Dynamic, Int};
-use z3::{FuncDecl, Model, SatResult};
+use z3::{FuncDecl, Model, SatResult, Symbol};
 
 /// Initial implementation of [`AbstractBoundedIntSolver`] which actually uses `Int` values
 /// and additional assertions. Eventually, we may want to extend the bounded domains to
@@ -124,9 +124,14 @@ impl<SOLVER: AbstractSolver> AbstractSolver for BoundedIntSolver<SOLVER> {
 }
 
 impl<SOLVER: AbstractOptimizeSolver> AbstractOptimizeSolver for BoundedIntSolver<SOLVER> {
-    fn assert_soft(&mut self, formula: &Bool, weight: BigRational) {
+    fn assert_soft_with_class(
+        &mut self,
+        formula: &Bool,
+        weight: BigRational,
+        class: Option<Symbol>,
+    ) {
         self.handle_assertion(formula);
-        self.inner.assert_soft(formula, weight);
+        self.inner.assert_soft_with_class(formula, weight, class);
     }
 
     fn get_lower(&self, objective_id: u32) -> Option<Dynamic> {
