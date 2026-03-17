@@ -12,11 +12,11 @@ pub enum BlockingStrategy {
 
 pub struct InferenceSolutionIterator<'a, SOLVER> {
     /// Referencing the associated inference encoder.
-    pub encoder: &'a InferenceProblemEncoder<'a, SOLVER>,
+    pub encoder: &'a InferenceProblemEncoder<SOLVER>,
 }
 
 impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceSolutionIterator<'a, SOLVER> {
-    pub fn new(encoder: &'a InferenceProblemEncoder<'a, SOLVER>) -> Self {
+    pub fn new(encoder: &'a InferenceProblemEncoder<SOLVER>) -> Self {
         InferenceSolutionIterator { encoder }
     }
 

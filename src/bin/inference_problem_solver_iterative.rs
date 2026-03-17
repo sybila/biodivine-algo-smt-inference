@@ -174,7 +174,7 @@ fn main() -> Result<(), anyhow::Error> {
     info!("Inference problem initialized. Creating constraints.");
 
     let encoder = InferenceProblemEncoder::new(
-        &inference_problem,
+        inference_problem,
         &mut solver,
         args.propagate_observations.unwrap_or(true),
     )?;
