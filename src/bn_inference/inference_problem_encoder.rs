@@ -15,16 +15,16 @@ use z3::{AstKind, FuncDecl, Model};
 /// actually encode an [`InferenceProblem`] into a solver query. Subsequently, this object
 /// is also used to translate the elements of the resulting model back into an interpretable
 /// result.
-pub struct InferenceProblemEncoder<'a, SOLVER> {
+pub struct InferenceProblemEncoder<SOLVER> {
     /// Referencing the associated inference problem.
-    pub problem: &'a InferenceProblem<SOLVER>,
+    pub problem: InferenceProblem<SOLVER>,
     /// An update function declaration of model variables.
     update_functions: BTreeMap<VariableId, FuncDecl>,
     /// Assigns each declared state the literals necessary to construct the state.
     state_atoms: BTreeMap<String, BTreeMap<VariableId, TypedAst>>,
 }
 
-impl<'a, SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<'a, SOLVER> {
+impl<SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<SOLVER> {
     /// Build a new encoder for a given [`InferenceProblem`] while also adding all
     /// required assertions to the given solver.
     ///
@@ -34,19 +34,19 @@ impl<'a, SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<'a,
     /// If `propagate_observations` is set to `true`, the encoder will try to inline known
     /// values of atoms that are fully determined by observations.
     pub fn new(
-        problem: &'a InferenceProblem<SOLVER>,
+        problem: InferenceProblem<SOLVER>,
         solver: &mut SOLVER,
         propagate_observations: bool,
     ) -> Result<Self, anyhow::Error> {
         let mut encoder = InferenceProblemEncoder {
             update_functions: problem
                 .variables()
-                .map(|var| (var, Self::mk_update_function(problem, var)))
+                .map(|var| (var, Self::mk_update_function(&problem, var)))
                 .collect(),
             state_atoms: problem
                 .states()
                 .map(|state| {
-                    let atoms = Self::mk_state_atoms(problem, state.as_str());
+                    let atoms = Self::mk_state_atoms(&problem, state.as_str());
                     (state, atoms)
                 })
                 .collect(),
@@ -58,14 +58,14 @@ impl<'a, SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<'a,
             // For each state, find observations that reason about this state. In these observations,
             // detect exact observations and use those to replace current free atoms with known
             // state values.
-            for constraint in problem.constraints() {
+            for constraint in encoder.problem.constraints() {
                 if let Some(constraint) = constraint.downcast_ref::<StateHasExactObservation>() {
                     let atoms = encoder
                         .state_atoms
                         .get_mut(constraint.state())
                         .expect("Unreachable: State must exist.");
                     for (var, val) in constraint.observations() {
-                        let val_const = problem[var].ast_type().new_value(val);
+                        let val_const = encoder.problem[var].ast_type().new_value(val);
                         atoms.insert(var, val_const);
                     }
                     info!(
@@ -80,7 +80,7 @@ impl<'a, SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<'a,
 
         // Declare domains for known `Int` update functions:
         for (var, func) in &encoder.update_functions {
-            let var_data = &problem[*var];
+            let var_data = &encoder.problem[*var];
             if var_data.is_int() {
                 solver.declare_int(func, Some(var_data.domain))?;
             }
@@ -89,7 +89,7 @@ impl<'a, SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<'a,
         // Declare domains for known `Int` atoms:
         for atoms in encoder.state_atoms.values() {
             for (var, atom) in atoms {
-                let var_data = &problem[*var];
+                let var_data = &encoder.problem[*var];
                 if var_data.is_int() {
                     if atom.as_dyn_ref().kind() == AstKind::Numeral {
                         // If observation propagation is enabled, some of these atoms could
@@ -103,7 +103,7 @@ impl<'a, SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<'a,
             }
         }
 
-        for constraint in problem.constraints() {
+        for constraint in encoder.problem.constraints() {
             constraint.assert_self(&encoder, solver)?;
         }
 
@@ -111,7 +111,7 @@ impl<'a, SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<'a,
     }
 }
 
-impl<'a, SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<'a, SOLVER> {
+impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
     /// A static helper which creates a declaration for a specific update function within
     /// the given inference problem.
     ///
@@ -259,7 +259,7 @@ impl<'a, SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<'a, SOLVER> {
     }
 }
 
-impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceProblemEncoder<'a, SOLVER> {
+impl<SOLVER: AbstractMonotoneSolver + 'static> InferenceProblemEncoder<SOLVER> {
     /// Extract the update function inferred for the given [`VariableId`]. This is similar
     /// to using [`AbstractMonotoneSolver::extract_monotone_function_points`],
     /// but it also clamps the arguments of the function to their respective intervals,

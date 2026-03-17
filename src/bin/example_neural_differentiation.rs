@@ -152,7 +152,7 @@ fn main() -> Result<(), anyhow::Error> {
         Box::new(InstantiatedMonotoneSolver::new(inner_solver))
     };
 
-    let _encoder = InferenceProblemEncoder::new(&inference_problem, &mut solver, true)?;
+    let _encoder = InferenceProblemEncoder::new(inference_problem, &mut solver, true)?;
 
     //let states_copy = states.clone();
     //let observations_copy = observations.clone();
