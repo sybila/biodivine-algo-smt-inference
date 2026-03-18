@@ -7,7 +7,7 @@ use anyhow::anyhow;
 use num_rational::BigRational;
 use std::collections::{BTreeMap, BTreeSet};
 use z3::ast::{Ast, Bool, Dynamic, forall_const};
-use z3::{FuncDecl, Model, SatResult};
+use z3::{FuncDecl, Model, SatResult, Symbol};
 
 pub struct QuantifiedMonotoneSolver<INNER: AbstractSolver> {
     inner: INNER,
@@ -328,8 +328,13 @@ impl<INNER: AbstractSolver> AbstractSolver for QuantifiedMonotoneSolver<INNER> {
 }
 
 impl<INNER: AbstractOptimizeSolver> AbstractOptimizeSolver for QuantifiedMonotoneSolver<INNER> {
-    fn assert_soft(&mut self, formula: &Bool, weight: BigRational) {
-        self.inner.assert_soft(formula, weight);
+    fn assert_soft_with_class(
+        &mut self,
+        formula: &Bool,
+        weight: BigRational,
+        class: Option<Symbol>,
+    ) {
+        self.inner.assert_soft_with_class(formula, weight, class);
 
         // Remember functions that already appeared in an assertion:
         for app in extract_function_applications(formula) {

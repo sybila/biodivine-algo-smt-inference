@@ -6,5 +6,6 @@ pub use inference_problem_encoder::InferenceProblemEncoder;
 
 mod inference_constraint;
 pub use inference_constraint::InferenceConstraint;
+pub use inference_constraint::SimpleInferenceConstraint;
 
 pub mod constraints;
