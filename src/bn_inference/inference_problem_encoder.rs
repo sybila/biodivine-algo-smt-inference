@@ -2,7 +2,8 @@ use crate::bn_inference::InferenceProblem;
 use crate::bn_inference::constraints::StateHasExactObservation;
 use crate::smt_solver::typed_ast::{AstType, MapDynAst, TypedAst};
 use crate::smt_solver::{
-    AbstractBoundedIntSolver, AbstractMonotoneSolver, AbstractSolver, IntFunction, model_eval_int,
+    AbstractBoundedIntSolver, AbstractMonotoneSolver, AbstractSolver, IntFunction,
+    extract_function_applications, model_eval_int, model_substitute_args_int_function,
 };
 use anyhow::anyhow;
 use biodivine_lib_param_bn::{BooleanNetwork, Regulation, RegulatoryGraph, VariableId};
@@ -321,5 +322,51 @@ impl<SOLVER: AbstractMonotoneSolver + 'static> InferenceProblemEncoder<SOLVER> {
             bn = bn.infer_valid_graph().map_err(|e| anyhow!(e))?;
         }
         Ok(bn)
+    }
+
+    /// Generate a formula blocking the combined current interpretation of functions, but only
+    /// consider the function points derived from function occurances in the asserted formula.
+    ///
+    /// For instance, if we have formula `(f(0, 1) < f(0, 0)) & (g(0) != g(1))` asserted, we block
+    /// all the interpretations that assign all of `f(0, 1)`, `f(0, 0)`, `g(0)`, `g(1)` to the same
+    /// values as in the current model.
+    ///
+    /// Asserting this prevents the solver from returning interpretation behaving the same way on
+    /// the function points determined by the formula.
+    ///
+    /// TODO: double check if this blocking of function points works well with essentiality constraints
+    ///       and our monotonization process.
+    ///
+    /// TODO: Current version collects the function occurances inefficiently and uses previous blocking
+    ///       clauses as well. We should instead collect the function occurances just once at the start
+    ///       and pass it as an argument. Similarly, no need to replicate blocking for the same rows.
+    pub fn generate_function_points_blocker(
+        &self,
+        solver: &SOLVER,
+        model: &Model,
+    ) -> Result<Bool, anyhow::Error> {
+        let mut eq_atoms: Vec<Bool> = Vec::new();
+
+        // For each function occurance, evaluate its arguments and substitute them with constants,
+        // creating concrete function calls for all table rows determined by the model
+        // Each function row will be turned into z3 expression in form `f(0,0) = model_value`
+        for assertion in solver.get_assertions() {
+            for func_call in extract_function_applications(&assertion) {
+                let subst_fn_call = model_substitute_args_int_function(&func_call, model);
+                let subst_fn_call_ast = TypedAst::try_from(subst_fn_call).unwrap();
+                let func_val = model.eval(&func_call, true).expect("Cannot evaluate.");
+                let func_val_ast = TypedAst::try_from(func_val).unwrap();
+                eq_atoms.push(subst_fn_call_ast.eq(&func_val_ast)?);
+            }
+        }
+
+        if eq_atoms.is_empty() {
+            return Err(anyhow!("No function rows to block".to_string()));
+        }
+
+        // Create conj of all equalities matching the current model
+        // Negate the conjunction to block it
+        let constraint = Bool::and(&eq_atoms.iter().collect::<Vec<_>>());
+        Ok(constraint.not())
     }
 }

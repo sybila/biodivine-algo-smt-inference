@@ -23,10 +23,6 @@ struct Arguments {
     /// Path to an AEON file with a PSBN model and fixed point annotations.
     model_path: String,
 
-    /// If specified, a satisfying BN is saved to this file (only supported for Boolean inference problems).
-    #[clap(short, long)]
-    output_path: Option<String>,
-
     /// Used SMT encoding type.
     #[clap(long, short, value_parser = PossibleValuesParser::new(["instantiated-eager", "instantiated-lazy", "quantified-individual", "quantified-merge"]), default_value = "instantiated-eager")]
     solver: String,
@@ -57,7 +53,7 @@ struct Arguments {
     verbose: Option<String>,
 
     /// Blocking strategy to use for enumeration.
-    #[clap(value_parser = PossibleValuesParser::new(["fixed-points", "interpretation", "combined"]), default_value = "fixed-points")]
+    #[clap(value_parser = PossibleValuesParser::new(["fixed-points", "function-points", "combined"]), default_value = "fixed-points")]
     blocker: String,
 
     /// Maximum solutions that will be enumerated.
@@ -190,8 +186,8 @@ fn main() -> Result<(), anyhow::Error> {
         &mut solver,
         &blocking_strategy,
         Some(args.limit),
-        true,
-        true,
+        false,
+        false,
         |_| Ok(()),
     );
 
@@ -203,7 +199,7 @@ fn main() -> Result<(), anyhow::Error> {
 fn get_blocking_strategy(blocking_str: &str) -> BlockingStrategy {
     match blocking_str {
         "fixed-points" => BlockingStrategy::FixedPoints,
-        "interpretation" => BlockingStrategy::Interpretation,
+        "function-points" => BlockingStrategy::FunctionPoints,
         "combined" => BlockingStrategy::Combined,
         _ => panic!("Unsupported blocking strategy: {blocking_str}"),
     }

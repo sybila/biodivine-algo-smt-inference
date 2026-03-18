@@ -1,4 +1,4 @@
-use crate::smt_solver::typed_ast::AstType;
+use crate::smt_solver::typed_ast::{AstType, TypedAst};
 use anyhow::anyhow;
 use linked_hash_set::LinkedHashSet;
 use std::collections::HashSet;
@@ -111,4 +111,24 @@ pub fn model_eval_int_function(expr: &Dynamic, model: &Model) -> (Vec<u32>, u32)
 
     let output = model_eval_int(expr, model);
     (args, output)
+}
+
+/// Assume the given expression is an Integer of Boolean uninterpreted function. Evaluate
+/// its arguments in the model and substitute the constants into the function call.
+///
+/// For instance, for expr `f(x_1, x_2)` and model assigning `x_1` -> `1` and `x_2` -> `3`,
+/// return substituted expr `f(1, 3)`.
+pub fn model_substitute_args_int_function(expr: &Dynamic, model: &Model) -> Dynamic {
+    let args = expr
+        .children()
+        .iter()
+        .map(|child| {
+            let model_value = model.eval(child, true).expect("Cannot evaluate.");
+            TypedAst::try_from(model_value).unwrap()
+        })
+        .collect::<Vec<_>>();
+
+    let input_refs: Vec<&dyn z3::ast::Ast> = args.iter().map(|b| b.as_dyn_ref()).collect();
+    let func_decl = expr.decl();
+    func_decl.apply(&input_refs)
 }

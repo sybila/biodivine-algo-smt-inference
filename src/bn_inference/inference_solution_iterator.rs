@@ -1,12 +1,9 @@
-use z3::Model;
-use z3::ast::Bool;
-
 use crate::bn_inference::InferenceProblemEncoder;
 use crate::smt_solver::AbstractMonotoneSolver;
 
 pub enum BlockingStrategy {
     FixedPoints,
-    Interpretation,
+    FunctionPoints,
     Combined,
 }
 
@@ -18,18 +15,6 @@ pub struct InferenceSolutionIterator<'a, SOLVER> {
 impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceSolutionIterator<'a, SOLVER> {
     pub fn new(encoder: &'a InferenceProblemEncoder<SOLVER>) -> Self {
         InferenceSolutionIterator { encoder }
-    }
-
-    pub fn generate_blocker(
-        &self,
-        model: &Model,
-        blocking_strategy: &BlockingStrategy,
-    ) -> Result<Bool, anyhow::Error> {
-        match blocking_strategy {
-            BlockingStrategy::FixedPoints => self.encoder.generate_fixed_point_blocker(model),
-            BlockingStrategy::Interpretation => todo!(),
-            BlockingStrategy::Combined => todo!(),
-        }
     }
 
     /// Iterate over satisfying solutions using the provided blocking strategy.
@@ -106,8 +91,16 @@ impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceSolutionIterator<'a,
                 break;
             }
 
+            let blocker = match blocking_strategy {
+                BlockingStrategy::FixedPoints => self.encoder.generate_fixed_point_blocker(&model),
+                BlockingStrategy::FunctionPoints => self
+                    .encoder
+                    .generate_function_points_blocker(solver, &model),
+                BlockingStrategy::Combined => todo!(),
+            };
+
             // Generate and assert a blocking clause
-            match self.generate_blocker(&model, blocking_strategy) {
+            match blocker {
                 Ok(blocker) => {
                     solver.assert(&blocker);
                 }
