@@ -1,5 +1,6 @@
 use crate::bn_inference::{InferenceProblem, InferenceProblemEncoder};
 use downcast_rs::{Downcast, impl_downcast};
+use z3::ast::Bool;
 
 /// Implemented by objects that can be used to assert constraints in an [`InferenceProblem`].
 /// It has access to an [`InferenceProblemEncoder`] which maps the elements of the inference
@@ -18,3 +19,25 @@ pub trait InferenceConstraint<SOLVER>: Downcast {
 }
 
 impl_downcast!(InferenceConstraint<SOLVER>);
+
+/// A simplified variant of [`InferenceConstraint`] that is used in situations where
+/// the whole constraint can be expressed as a single formula, without requiring addition
+/// interaction with the solver or other special treatment.
+///
+/// Simple constraints can either directly derive [`InferenceConstraint`], or they can be
+/// wrapped into [`crate::bn_inference::constraints::SoftConstraint`] to allow optimization as
+/// soft constraints. Note that the `#[derive(InferenceConstraint)]` currently only works
+/// if `SimpleInferenceConstraint` is implemented for [`crate::smt_solver::AbstractSolver`].
+pub trait SimpleInferenceConstraint<SOLVER>: Downcast {
+    /// Equivalent to [`InferenceConstraint::validate`].
+    fn validate(&self, problem: &InferenceProblem<SOLVER>) -> Result<(), anyhow::Error>;
+
+    /// Produce a formula that can be given to the `SOLVER` when
+    /// [`InferenceConstraint::assert_self`] is called.
+    fn mk_assertion(
+        &self,
+        encoder: &InferenceProblemEncoder<SOLVER>,
+    ) -> Result<Bool, anyhow::Error>;
+}
+
+impl_downcast!(SimpleInferenceConstraint<SOLVER>);
