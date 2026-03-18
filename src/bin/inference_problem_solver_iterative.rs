@@ -48,6 +48,10 @@ struct Arguments {
     #[clap(long, default_value = "false")]
     print_update_rules: bool,
 
+    /// If set to `true`, the solver will print the inferred fixed point states.
+    #[clap(long, default_value = "false")]
+    print_fixed_points: bool,
+
     /// Log level verbosity. Flag `-v` sets log level to 'info'. Manually, you can specify: trace, debug, info, warn, or error.
     #[arg(long, short, num_args = 0..=1, default_missing_value = "info", require_equals = true)]
     verbose: Option<String>,
@@ -186,8 +190,8 @@ fn main() -> Result<(), anyhow::Error> {
         &mut solver,
         &blocking_strategy,
         Some(args.limit),
-        false,
-        false,
+        args.print_fixed_points,
+        args.print_update_rules,
         |_| Ok(()),
     );
 
