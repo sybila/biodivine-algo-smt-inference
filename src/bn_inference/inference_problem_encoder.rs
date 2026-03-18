@@ -253,36 +253,41 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
             return Err(anyhow!("No state variables to block".to_string()));
         }
 
-        // Create conj of all equalities matching the current model
-        // Negate the conjunction to block it
+        // Create conjunction of all equalities matching the current model
+        // Negate the conjunction so that next model must differ in at least one value
         let constraint = Bool::and(&eq_atoms.iter().collect::<Vec<_>>());
         Ok(constraint.not())
     }
 
-    /// Generate a formula blocking the combined current interpretation of functions, but only
-    /// consider the function points derived from function occurances in the asserted formula.
+    /// Generates a formula to block the current interpretation of either the specified
+    /// `function` or all functions combined.
     ///
-    /// For instance, if we have formula `(f(0, 1) < f(0, 0)) & (g(0) != g(1))` asserted, we block
-    /// all the interpretations that assign all of `f(0, 1)`, `f(0, 0)`, `g(0)`, `g(1)` to the same
-    /// values as in the current model.
-    ///
-    /// Asserting this prevents the solver from returning interpretation behaving the same way on
-    /// the function points determined by the formula.
+    /// The constraint is built using the specific function points gathered by evaluating the
+    /// calls in `original_fn_calls`. This ensures that in the next model, at least one of
+    /// these points must evaluate to a different value. This can also result in blocking
+    /// multiple interpretations at once (if they behave the same on relevant function points).
     ///
     /// TODO: double check if this blocking of function points works well with essentiality
     ///       constraints and our monotonization process.
     pub fn generate_function_points_blocker(
         &self,
         model: &Model,
+        function: Option<String>,
         original_fn_calls: &BTreeMap<String, Vec<Dynamic>>,
     ) -> Result<Bool, anyhow::Error> {
         let mut eq_atoms: Vec<Bool> = Vec::new();
 
-        // For each function occurance, evaluate its arguments and substitute them with constants,
-        // creating concrete function calls for all table rows determined by the model
-        // Each function row will be turned into z3 expression in form `f(0,0) = model_value`
-        for unique_fn_calls in original_fn_calls.values() {
+        // Evaluate and substitute arguments for each function occurrence to create concrete
+        // calls (e.g., `f(0,0) = model_value`) for all model-defined function table rows.
+        for (fn_name, unique_fn_calls) in original_fn_calls {
             for func_call in unique_fn_calls {
+                // If only a single function is specified, skip the rest
+                if let Some(target_name) = &function
+                    && fn_name != target_name
+                {
+                    continue;
+                }
+
                 let subst_fn_call = model_substitute_args_int_function(func_call, model);
                 let func_val = model.eval(func_call, true).expect("Cannot evaluate.");
 
@@ -296,8 +301,8 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
             return Err(anyhow!("No function rows to block".to_string()));
         }
 
-        // Create conj of all equalities matching the current model
-        // Negate the conjunction to block it
+        // Create conjunction of all equalities matching the current model
+        // Negate the conjunction so that next model must differ in at least one point
         let constraint = Bool::and(&eq_atoms.iter().collect::<Vec<_>>());
         Ok(constraint.not())
     }

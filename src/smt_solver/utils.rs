@@ -1,7 +1,8 @@
+use crate::smt_solver::AbstractSolver;
 use crate::smt_solver::typed_ast::{AstType, TypedAst};
 use anyhow::anyhow;
 use linked_hash_set::LinkedHashSet;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use z3::ast::{Ast, Bool, Dynamic, Int};
 use z3::{DeclKind, FuncDecl, Model};
 
@@ -65,6 +66,36 @@ pub fn extract_int_functions(fml: &Bool) -> LinkedHashSet<Int> {
     }
 
     results
+}
+
+/// Extract all uninterpreted function usages from all asserted expressions. The expressions
+/// are only allowed to use `Int` and `Bool` functions. Only unique expressions are returned,
+/// and expressions of each function are sorted for determinism.
+///
+/// This uses [extract_function_applications] internally to process each assertion.
+pub fn collect_asserted_fn_calls<SOLVER: AbstractSolver>(
+    solver: &SOLVER,
+) -> BTreeMap<String, Vec<Dynamic>> {
+    // Collect the fn calls into `HashSet`s at first to only get unique ones
+    let mut func_calls_hash: BTreeMap<String, HashSet<Dynamic>> = BTreeMap::new();
+    for assertion in solver.get_assertions() {
+        for func_call in extract_function_applications(&assertion) {
+            func_calls_hash
+                .entry(func_call.decl().name())
+                .or_default()
+                .insert(func_call);
+        }
+    }
+
+    // Convert the `HashSet`s to sorted vectors for determinism
+    func_calls_hash
+        .into_iter()
+        .map(|(name, set)| {
+            let mut v: Vec<Dynamic> = set.into_iter().collect();
+            v.sort_by_key(|call| call.to_string());
+            (name, v)
+        })
+        .collect()
 }
 
 /// Extract the type signature of the given `function`, assuming it only has [`AstType`] arguments

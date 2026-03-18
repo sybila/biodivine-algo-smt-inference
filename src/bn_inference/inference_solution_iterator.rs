@@ -1,9 +1,9 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 
-use z3::ast::{Ast, Dynamic};
+use z3::ast::Dynamic;
 
 use crate::bn_inference::InferenceProblemEncoder;
-use crate::smt_solver::{AbstractMonotoneSolver, extract_function_applications};
+use crate::smt_solver::{AbstractMonotoneSolver, collect_asserted_fn_calls};
 
 pub enum BlockingStrategy {
     FixedPoints,
@@ -52,25 +52,7 @@ impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceSolutionIterator<'a,
         let unique_fn_calls: BTreeMap<String, Vec<Dynamic>> = match blocking_strategy {
             BlockingStrategy::FixedPoints => BTreeMap::new(),
             BlockingStrategy::FunctionPoints | BlockingStrategy::Combined => {
-                // Collect fn calls into HashSet to only get unique ones
-                let mut func_calls_hash: BTreeMap<String, HashSet<Dynamic>> = BTreeMap::new();
-                for assertion in solver.get_assertions() {
-                    for func_call in extract_function_applications(&assertion) {
-                        func_calls_hash
-                            .entry(func_call.decl().name())
-                            .or_default()
-                            .insert(func_call);
-                    }
-                }
-                // Convert the set to a sorted vector for determinism
-                func_calls_hash
-                    .into_iter()
-                    .map(|(name, set)| {
-                        let mut v: Vec<Dynamic> = set.into_iter().collect();
-                        v.sort_by_key(|call| call.to_string());
-                        (name, v)
-                    })
-                    .collect()
+                collect_asserted_fn_calls(solver)
             }
         };
 
@@ -124,9 +106,10 @@ impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceSolutionIterator<'a,
 
             let blocker = match blocking_strategy {
                 BlockingStrategy::FixedPoints => self.encoder.generate_fixed_point_blocker(&model),
-                BlockingStrategy::FunctionPoints => self
-                    .encoder
-                    .generate_function_points_blocker(&model, &unique_fn_calls),
+                BlockingStrategy::FunctionPoints => {
+                    self.encoder
+                        .generate_function_points_blocker(&model, None, &unique_fn_calls)
+                }
                 BlockingStrategy::Combined => todo!(),
             };
 
