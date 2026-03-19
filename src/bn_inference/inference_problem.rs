@@ -1,5 +1,5 @@
-use crate::bn_inference::InferenceConstraint;
 use crate::bn_inference::constraints::{RegulatorIsEssential, RegulatorIsMonotone};
+use crate::bn_inference::{DynInferenceConstraint, InferenceConstraint};
 use crate::smt_solver::AbstractMonotoneBoundedIntSolver;
 use crate::smt_solver::typed_ast::{AstType, TypedAst};
 use biodivine_lib_param_bn::{Monotonicity, RegulatoryGraph, VariableId};
@@ -15,7 +15,7 @@ pub struct InferenceProblem<SOLVER> {
     /// to assert model properties.
     declared_abstract_states: BTreeSet<String>,
     /// List of constraints that must be satisfied by the inferred model.
-    inference_constraints: Vec<Box<dyn InferenceConstraint<SOLVER>>>,
+    inference_constraints: Vec<DynInferenceConstraint<SOLVER>>,
 }
 
 /// A data struct managing known information about one model variable within [`InferenceProblem`].
