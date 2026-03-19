@@ -6,6 +6,11 @@ pub use state_has_observation::StateHasExactObservation;
 pub use state_has_observation::StateHasWeightedObservation;
 pub use state_has_observation::StateObservation;
 
+mod value_comparison;
+pub use value_comparison::CmpOp;
+pub use value_comparison::ComparedValue;
+pub use value_comparison::ValueComparison;
+
 mod state_comparison;
 pub use state_comparison::StateComparison;
 
