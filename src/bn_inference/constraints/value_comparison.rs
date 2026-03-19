@@ -41,6 +41,21 @@ impl ComparedValue {
         }
     }
 
+    pub fn as_constant(&self) -> Option<u32> {
+        match self {
+            ComparedValue::Constant(value) => Some(*value),
+            _ => None,
+        }
+    }
+
+    pub fn as_variable(&self) -> Option<VariableId> {
+        match self {
+            ComparedValue::Constant(_) => None,
+            ComparedValue::VariableInState(_, var) => Some(*var),
+            ComparedValue::UpdateFunctionOutputInState(_, var) => Some(*var),
+        }
+    }
+
     /// Get the underlying type of this value.
     pub fn get_ast_type<SOLVER: 'static>(&self, problem: &InferenceProblem<SOLVER>) -> AstType {
         match self {
@@ -238,8 +253,20 @@ impl ValueComparison {
 
 impl<SOLVER: AbstractSolver + 'static> SimpleInferenceConstraint<SOLVER> for ValueComparison {
     fn validate(&self, problem: &InferenceProblem<SOLVER>) -> Result<(), anyhow::Error> {
+        // Check that the variables and states exist:
         self.left.validate(problem)?;
         self.right.validate(problem)?;
+        // Check that comparisons all fall within the correct domain:
+        if let (Some(variable), Some(constant)) =
+            (self.left.as_variable(), self.right.as_constant())
+        {
+            check_variable_domain(problem, variable, constant)?;
+        }
+        if let (Some(constant), Some(variable)) =
+            (self.left.as_constant(), self.right.as_variable())
+        {
+            check_variable_domain(problem, variable, constant)?;
+        }
         Ok(())
     }
 
