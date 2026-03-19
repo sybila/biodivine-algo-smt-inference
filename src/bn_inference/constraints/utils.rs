@@ -1,7 +1,8 @@
 use crate::bn_inference::InferenceProblem;
 use crate::bn_inference::inference_problem::VariableData;
 use anyhow::anyhow;
-use biodivine_lib_param_bn::VariableId;
+use biodivine_lib_param_bn::{ModelAnnotation, VariableId};
+use std::collections::{BTreeMap, HashMap};
 
 pub struct ConstraintStrings();
 
@@ -18,6 +19,13 @@ impl ConstraintStrings {
     pub const LESS_EQUAL: &str = "less-equal";
     pub const GREATER: &str = "greater";
     pub const GREATER_EQUAL: &str = "greater-equal";
+}
+
+/// A helper function which ensures we always go through the model annotations in a sorted order.
+pub fn sorted_map(
+    annotations: &HashMap<String, ModelAnnotation>,
+) -> BTreeMap<&String, &ModelAnnotation> {
+    BTreeMap::from_iter(annotations.iter())
 }
 
 pub fn check_state_exists<S: 'static>(
