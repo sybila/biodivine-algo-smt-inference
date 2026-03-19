@@ -9,6 +9,7 @@ use biodivine_lib_param_bn::ModelAnnotation;
 use num_rational::BigRational;
 use num_traits::One;
 use std::marker::PhantomData;
+use log::info;
 use z3::Symbol;
 
 /// A wrapper for [`SimpleInferenceConstraint`] allowing to designate a constraint as "soft".
@@ -99,6 +100,7 @@ impl<SOLVER: AbstractOptimizeSolver + 'static, C: SimpleInferenceConstraint<SOLV
         solver: &mut SOLVER,
     ) -> Result<(), Error> {
         let assertion = self.constraint.mk_assertion(encoder)?;
+        info!("Asserting soft constraint with `weight={}` and `priority_class={:?}`", self.weight, self.priority_class);
         solver.assert_soft_with_class(
             &assertion,
             self.weight.clone(),

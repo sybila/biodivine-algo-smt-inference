@@ -85,6 +85,9 @@ fn main() -> Result<(), anyhow::Error> {
     info!("Loading observations and collecting fixed-point specification...");
 
     let annotations = ModelAnnotation::from_model_string(&model_string);
+
+    // This is a legacy way to read constraints that will be removed in the future,
+    // but for now we keep it to ensure backwards compatibility.
     let mut observations = BTreeMap::new();
     if let Some(fix_node) = annotations.get_child(&["fix"]) {
         for (fp_id, fp_values) in fix_node.children() {
@@ -149,7 +152,9 @@ fn main() -> Result<(), anyhow::Error> {
         }
     }
 
-    info!("Inference problem initialized. Creating constraints.");
+    inference_problem.initialize_constraints(&psbn, &annotations)?;
+
+    info!("Inference problem initialized. Creating solver...");
 
     let encoder = InferenceProblemEncoder::new(
         inference_problem,
