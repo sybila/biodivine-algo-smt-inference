@@ -6,6 +6,9 @@ pub use state_has_observation::StateHasExactObservation;
 pub use state_has_observation::StateHasWeightedObservation;
 pub use state_has_observation::StateObservation;
 
+mod state_comparison;
+pub use state_comparison::StateComparison;
+
 mod regulator_is_monotone;
 pub use regulator_is_monotone::RegulatorIsMonotone;
 
