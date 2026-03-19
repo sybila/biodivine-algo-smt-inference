@@ -6,10 +6,10 @@ use biodivine_algo_smt_inference::bn_inference::{
     InferenceConstraint, InferenceProblem, InferenceProblemEncoder,
 };
 use biodivine_lib_param_bn::ModelAnnotation;
+use log::info;
 use num_rational::BigRational;
 use num_traits::One;
 use std::marker::PhantomData;
-use log::info;
 use z3::Symbol;
 
 /// A wrapper for [`SimpleInferenceConstraint`] allowing to designate a constraint as "soft".
@@ -24,9 +24,9 @@ use z3::Symbol;
 /// [`InferenceConstraint`]. However, [`SoftConstraint`] makes it possible to interpret instances
 /// of [`SimpleInferenceConstraint`] as soft constraints directly without any code duplication.*
 pub struct SoftConstraint<SOLVER: AbstractOptimizeSolver, C: SimpleInferenceConstraint<SOLVER>> {
-    constraint: C,
-    priority_class: Symbol,
-    weight: BigRational,
+    pub constraint: C,
+    pub priority_class: Symbol,
+    pub weight: BigRational,
     _phantom: PhantomData<SOLVER>,
 }
 
@@ -100,7 +100,10 @@ impl<SOLVER: AbstractOptimizeSolver + 'static, C: SimpleInferenceConstraint<SOLV
         solver: &mut SOLVER,
     ) -> Result<(), Error> {
         let assertion = self.constraint.mk_assertion(encoder)?;
-        info!("Asserting soft constraint with `weight={}` and `priority_class={:?}`", self.weight, self.priority_class);
+        info!(
+            "Asserting soft constraint with `weight={}` and `priority_class={:?}`",
+            self.weight, self.priority_class
+        );
         solver.assert_soft_with_class(
             &assertion,
             self.weight.clone(),

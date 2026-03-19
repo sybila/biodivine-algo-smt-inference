@@ -1,0 +1,274 @@
+use biodivine_algo_smt_inference::bn_inference::constraints::{
+    SoftConstraint, StateComparison, StateIsFixedPoint, ValueComparison,
+};
+use biodivine_algo_smt_inference::bn_inference::{
+    InferenceProblem, InferenceProblemEncoder, SimpleInferenceConstraint,
+};
+use biodivine_algo_smt_inference::smt_solver::{
+    AbstractOptimizeSolver, AbstractSolver, BoundedIntSolver, DynMonotoneBoundedIntOptimizeSolver,
+    InstantiatedMonotoneSolver, QuantifiedMonotoneSolver,
+};
+use biodivine_lib_param_bn::{BooleanNetwork, ModelAnnotation};
+use clap::Parser;
+use clap::builder::PossibleValuesParser;
+use log::{error, info};
+use std::collections::BTreeMap;
+use std::fmt::Debug;
+use std::rc::Rc;
+use z3::{Model, SatResult};
+
+#[derive(Parser)]
+#[clap(about = "SMT benchmarking prototype for BN inference (single solution).")]
+struct Arguments {
+    /// Path to an AEON file with a PSBN model and fixed point annotations.
+    model_path: String,
+
+    /// If specified, a satisfying BN is saved to this file (only supported for Boolean inference problems).
+    #[clap(short, long)]
+    output_path: Option<String>,
+
+    /// Used SMT encoding type.
+    #[clap(long, short, value_parser = PossibleValuesParser::new(["instantiated-eager", "instantiated-lazy", "quantified-individual", "quantified-merge"]), default_value = "instantiated-eager")]
+    solver: String,
+
+    /// Automatically eliminates some simple Boolean universal quantifiers
+    #[clap(long, default_value = "true")]
+    boolean_quantifier_optimization: Option<bool>,
+
+    /// When lazy instantiation is enabled, this option enforces that a fresh solver is used
+    /// for every iteration. This is typically *worse* than reusing an existing solver (hence
+    /// the option is off by default). However, in rare cases it can be helpful to reset
+    /// the solver state between iterations.
+    ///
+    /// For other solvers, the option is ignored.
+    #[clap(long, default_value = "false")]
+    force_lazy_reinitialization: Option<bool>,
+
+    /// Automatically propagates exact state observations, simplifying the SMT query
+    #[clap(long, default_value = "true")]
+    propagate_observations: Option<bool>,
+
+    /// If set to `true`, the solver will print the inferred update functions for all variables.
+    #[clap(long, default_value = "false")]
+    print_update_rules: bool,
+
+    /// If set to `true`, the solver will also print the inferred state valuations.
+    #[clap(long, default_value = "false")]
+    print_state_valuations: bool,
+
+    /// If set to `true`, the solver will also print every soft constraint and its validity.
+    #[clap(long, default_value = "false")]
+    print_soft_constraints: bool,
+
+    /// If set to `true`, the solver will also print every intermediate solution, using the
+    /// same print settings as for the final solution (including saving the intermediate
+    /// model to a file, if specified).
+    #[clap(long, default_value = "false")]
+    print_intermediate_results: bool,
+
+    /// Log level verbosity. Flag `-v` sets log level to 'info'. Manually, you can specify: trace, debug, info, warn, or error.
+    #[arg(long, short, num_args = 0..=1, default_missing_value = "info", require_equals = true)]
+    verbose: Option<String>,
+}
+
+fn main() -> Result<(), anyhow::Error> {
+    let args = Arguments::parse();
+    let args = Rc::new(args);
+
+    // Handle verbose logging - if specified, override env_logger settings.
+    // Otherwise, adhere to settings read from `RUST_LOG`.
+    if let Some(ref log_level) = args.verbose {
+        env_logger::Builder::from_default_env()
+            .filter_module(
+                "biodivine_algo_smt_inference",
+                match log_level.as_str() {
+                    "trace" => log::LevelFilter::Trace,
+                    "debug" => log::LevelFilter::Debug,
+                    "info" => log::LevelFilter::Info,
+                    "warn" => log::LevelFilter::Warn,
+                    "error" => log::LevelFilter::Error,
+                    _ => log::LevelFilter::Info,
+                },
+            )
+            .init();
+    } else {
+        env_logger::init();
+    }
+
+    let model_string = std::fs::read_to_string(&args.model_path)?;
+    let psbn = BooleanNetwork::try_from(model_string.as_str()).unwrap();
+    let psbn = psbn.name_implicit_parameters();
+    let psbn = Rc::new(psbn);
+    let annotations = ModelAnnotation::from_model_string(&model_string);
+
+    info!("Building solver using `{}` encoding..", args.solver);
+
+    let mut inference_problem = InferenceProblem::<DynMonotoneBoundedIntOptimizeSolver>::new();
+
+    let base_solver = BoundedIntSolver::new_strict(z3::Optimize::new());
+    let mut solver: DynMonotoneBoundedIntOptimizeSolver = match args.solver.as_str() {
+        "quantified-individual" => Box::new(QuantifiedMonotoneSolver::new(
+            base_solver,
+            args.boolean_quantifier_optimization.unwrap_or(true),
+        )),
+        "quantified-merge" => Box::new(QuantifiedMonotoneSolver::new_merge(
+            base_solver,
+            args.boolean_quantifier_optimization.unwrap_or(true),
+        )),
+        "instantiated-eager" => Box::new(InstantiatedMonotoneSolver::new(base_solver)),
+        "instantiated-lazy" => Box::new(InstantiatedMonotoneSolver::new_lazy(
+            base_solver,
+            args.force_lazy_reinitialization.unwrap_or(false),
+        )),
+        _ => panic!("Unknown solver: {}", args.solver),
+    };
+
+    // We have to explicitly initialize the inference problem with influence graph constraints
+    // to make sure the variable domains are correctly included.
+
+    // Declare all variables:
+    for var in psbn.variables() {
+        let name = psbn.get_variable_name(var);
+        let max_value = annotations
+            .get_value(&["variable", name, "max_value"])
+            .map(|it| it.parse::<u32>().unwrap())
+            .unwrap_or(1);
+        let var_p = inference_problem.declare_variable(name.as_str(), (0, max_value));
+        assert_eq!(var_p, var);
+    }
+
+    inference_problem.initialize_regulations(psbn.as_graph())?;
+    inference_problem.initialize_constraints_and_weights(&psbn, &annotations)?;
+
+    info!("Inference problem initialized. Creating constraints.");
+
+    let encoder = InferenceProblemEncoder::new(
+        inference_problem,
+        &mut solver,
+        args.propagate_observations.unwrap_or(true),
+    )?;
+
+    let encoder = Rc::new(encoder);
+
+    info!("Checking for solution...");
+
+    if args.print_intermediate_results {
+        let args_copy = args.clone();
+        let psbn_copy = psbn.clone();
+        let encoder_copy = encoder.clone();
+        solver.register_model_handler(Box::new(move |result| {
+            println!("Solver made progress. New intermediate solution.");
+
+            report_solution(&args_copy, &psbn_copy, &encoder_copy, None, result)
+                .expect("Failed to report solution");
+        }));
+    }
+
+    let result = solver.check();
+
+    info!("Has solution? {:?}", result);
+
+    if result == SatResult::Sat {
+        let model = solver.get_model().unwrap();
+        report_solution(
+            &args,
+            psbn.as_ref(),
+            encoder.as_ref(),
+            Some(&solver),
+            &model,
+        )?;
+    }
+
+    // Print 1/0 as the last piece of output:
+    match result {
+        SatResult::Unsat => println!("0"),
+        SatResult::Unknown => println!("?"),
+        SatResult::Sat => {
+            println!("1 (penalty: {:?})", solver.get_lower(0).unwrap());
+        }
+    }
+
+    Ok(())
+}
+
+fn report_solution(
+    args: &Arguments,
+    psbn: &BooleanNetwork,
+    encoder: &InferenceProblemEncoder<DynMonotoneBoundedIntOptimizeSolver>,
+    solver: Option<&DynMonotoneBoundedIntOptimizeSolver>,
+    model: &Model,
+) -> Result<(), anyhow::Error> {
+    // TODO: Find a way to evaluate functions without needing the solver.
+    if let Some(solver) = solver {
+        if let Some(output_path) = args.output_path.clone() {
+            match encoder.decode_boolean_network(solver, model, true) {
+                Ok(bn) => {
+                    let bn = bn.inline_constants(true, true);
+                    std::fs::write(output_path, bn.to_string())?;
+                }
+                Err(err) => {
+                    error!("Unable to decode boolean network. {err}",);
+                }
+            }
+        }
+
+        if args.print_update_rules {
+            for var in psbn.variables() {
+                let function = encoder.decode_update_function(var, solver, model)?;
+                println!("=== Function table {} ===", psbn.get_variable_name(var));
+                println!("{}", function);
+            }
+        }
+    }
+
+    if args.print_state_valuations {
+        println!("=== State table ===");
+        for state in encoder.problem.states() {
+            let decoded = encoder.decode_state(&state, model);
+            let named = decoded
+                .into_iter()
+                .map(|(a, b)| (psbn.get_variable_name(a), b))
+                .collect::<BTreeMap<_, _>>();
+            println!("State `{state}`: {:?}", named);
+        }
+    }
+
+    if args.print_soft_constraints {
+        println!("=== Constraint satisfaction ===");
+        print_violated_clauses::<StateComparison>(encoder, model)?;
+        print_violated_clauses::<StateIsFixedPoint>(encoder, model)?;
+        print_violated_clauses::<ValueComparison>(encoder, model)?;
+    }
+
+    Ok(())
+}
+
+fn print_violated_clauses<
+    S: SimpleInferenceConstraint<DynMonotoneBoundedIntOptimizeSolver> + Debug,
+>(
+    encoder: &InferenceProblemEncoder<DynMonotoneBoundedIntOptimizeSolver>,
+    model: &Model,
+) -> Result<(), anyhow::Error> {
+    for constraint in encoder.problem.constraints() {
+        let Some(constraint) =
+            constraint.downcast_ref::<SoftConstraint<DynMonotoneBoundedIntOptimizeSolver, S>>()
+        else {
+            continue;
+        };
+
+        let formula = constraint.constraint.mk_assertion(encoder)?;
+        let is_satisfied = model
+            .eval(&formula, true)
+            .and_then(|it| it.as_bool())
+            .expect("Constraint cannot be evaluated.");
+
+        if !is_satisfied {
+            println!(
+                "Violated `{:?}` with weight=`{}` and class=`{:?}`",
+                constraint.constraint, constraint.weight, constraint.priority_class
+            );
+        }
+    }
+
+    Ok(())
+}
