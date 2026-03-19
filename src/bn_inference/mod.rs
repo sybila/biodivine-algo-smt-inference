@@ -10,5 +10,5 @@ pub use inference_constraint::SimpleInferenceConstraint;
 
 pub mod constraints;
 
-mod inference_solution_iterator;
-pub use inference_solution_iterator::{BlockingStrategy, InferenceSolutionIterator};
+mod inference_solver_iterator;
+pub use inference_solver_iterator::{BlockingStrategy, InferenceSolverIterator};

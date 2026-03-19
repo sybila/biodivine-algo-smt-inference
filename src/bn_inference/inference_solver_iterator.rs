@@ -11,14 +11,50 @@ pub enum BlockingStrategy {
     Combined,
 }
 
-pub struct InferenceSolutionIterator<'a, SOLVER> {
+/// Iterates through solutions provided by a prepared solver, using an encoder
+/// and a particular blocking strategy to ensure uniqueness.
+///
+/// This wrapper maintains the solver state and applies the [`BlockingStrategy`]
+/// after each successful SAT result to exclude previously found models from
+/// the search space.
+pub struct InferenceSolverIterator<'a, SOLVER> {
     /// Referencing the associated inference encoder.
     pub encoder: &'a InferenceProblemEncoder<SOLVER>,
+
+    /// The solver instance used for finding solutions.
+    /// TODO: currently the solver is fully owned, but reference may be sufficient.
+    ///       Intuitively, I'd prefer full ownership as is.
+    pub solver: SOLVER,
+
+    /// Strategy used to exclude found models from subsequent iterations.
+    pub blocking_strategy: BlockingStrategy,
+
+    // Precomputed map of all unique function occurances. This is only useful for
+    // blocking strategies involving functions.
+    unique_fn_calls: BTreeMap<String, Vec<Dynamic>>,
 }
 
-impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceSolutionIterator<'a, SOLVER> {
-    pub fn new(encoder: &'a InferenceProblemEncoder<SOLVER>) -> Self {
-        InferenceSolutionIterator { encoder }
+impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceSolverIterator<'a, SOLVER> {
+    pub fn new(
+        encoder: &'a InferenceProblemEncoder<SOLVER>,
+        solver: SOLVER,
+        blocking_strategy: BlockingStrategy,
+    ) -> Self {
+        // For some blocking strategies involving functions, we precompute all
+        // unique function occurances in the original solver assertions.
+        let unique_fn_calls: BTreeMap<String, Vec<Dynamic>> = match blocking_strategy {
+            BlockingStrategy::FixedPoints => BTreeMap::new(),
+            BlockingStrategy::FunctionPoints | BlockingStrategy::Combined => {
+                collect_asserted_fn_calls(&solver)
+            }
+        };
+
+        InferenceSolverIterator {
+            encoder,
+            solver,
+            blocking_strategy,
+            unique_fn_calls,
+        }
     }
 
     /// Iterate over satisfying solutions using the provided blocking strategy.
@@ -30,13 +66,11 @@ impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceSolutionIterator<'a,
     /// The `strategy` determines how to block each found model, see [`BlockingStrategy`].
     ///
     /// For now, we use a `callback` function to process each solution as we go. This can
-    /// be used for on-the-fly logging or to stop computation when some condition is met.
-    /// We allow the callback to return error and finish the computation from the outside for
-    /// convenience. It is recommended to use `max_solutions` for simple solution limit though.
+    /// be used for custom on-the-fly logging or to stop computation when some external condition
+    /// is met. We allow the callback to return error and finish the computation from the outside
+    /// for convenience. It is recommended to use `max_solutions` for simple solution limit though.
     pub fn get_n_solutions<F>(
-        &self,
-        solver: &mut SOLVER,
-        blocking_strategy: &BlockingStrategy,
+        &mut self,
         max_solutions: Option<usize>,
         print_fixed_points: bool,
         print_functions: bool,
@@ -47,24 +81,18 @@ impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceSolutionIterator<'a,
     {
         let mut collected_models = Vec::new();
 
-        // For some blocking strategies involving functions, we should pre-compute
-        // all unique function occurances in the original formula.
-        let unique_fn_calls: BTreeMap<String, Vec<Dynamic>> = match blocking_strategy {
-            BlockingStrategy::FixedPoints => BTreeMap::new(),
-            BlockingStrategy::FunctionPoints | BlockingStrategy::Combined => {
-                collect_asserted_fn_calls(solver)
-            }
-        };
-
         loop {
             // Check for satisfiability and stop if not sat
-            if solver.check() != z3::SatResult::Sat {
+            if self.solver.check() != z3::SatResult::Sat {
                 break;
             }
 
             // The model will be pushed to `collected_models` at the end of the
             // iteration to avoid passing the reference there and back
-            let model = solver.get_model().expect("Failed to get model from solver");
+            let model = self
+                .solver
+                .get_model()
+                .expect("Failed to get model from solver");
             println!("==== Found model n. {} ====", collected_models.len() + 1);
 
             if print_fixed_points {
@@ -80,7 +108,7 @@ impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceSolutionIterator<'a,
                 for var in self.encoder.problem.variables() {
                     let function = self
                         .encoder
-                        .decode_update_function(var, solver, &model)
+                        .decode_update_function(var, &self.solver, &model)
                         .unwrap();
                     println!(
                         "> Function table {}",
@@ -104,19 +132,21 @@ impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceSolutionIterator<'a,
                 break;
             }
 
-            let blocker = match blocking_strategy {
-                BlockingStrategy::FixedPoints => self.encoder.generate_fixed_point_blocker(&model),
-                BlockingStrategy::FunctionPoints => {
-                    self.encoder
-                        .generate_function_points_blocker(&model, None, &unique_fn_calls)
-                }
-                BlockingStrategy::Combined => todo!(),
-            };
+            let blocker =
+                match self.blocking_strategy {
+                    BlockingStrategy::FixedPoints => {
+                        self.encoder.generate_fixed_point_blocker(&model, None)
+                    }
+                    BlockingStrategy::FunctionPoints => self
+                        .encoder
+                        .generate_function_points_blocker(&model, None, &self.unique_fn_calls),
+                    BlockingStrategy::Combined => todo!(),
+                };
 
             // Generate and assert a blocking clause
             match blocker {
                 Ok(blocker) => {
-                    solver.assert(&blocker);
+                    self.solver.assert(&blocker);
                 }
                 Err(e) => {
                     // If we can't generate a blocker, there is something really wrong

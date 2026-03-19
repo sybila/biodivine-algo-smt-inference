@@ -3,7 +3,7 @@ use biodivine_algo_smt_inference::bn_inference::constraints::{
     StateHasExactObservation, StateHasWeightedObservation, StateIsFixedPoint, StateObservation,
 };
 use biodivine_algo_smt_inference::bn_inference::{
-    InferenceProblem, InferenceProblemEncoder, InferenceSolutionIterator,
+    InferenceProblem, InferenceProblemEncoder, InferenceSolverIterator,
 };
 use biodivine_algo_smt_inference::smt_solver::{
     BoundedIntSolver, DynMonotoneBoundedIntOptimizeSolver, InstantiatedMonotoneSolver,
@@ -185,10 +185,8 @@ fn main() -> Result<(), anyhow::Error> {
     );
 
     let blocking_strategy = get_blocking_strategy(&args.blocker);
-    let solution_iterator = InferenceSolutionIterator::new(&encoder);
+    let mut solution_iterator = InferenceSolverIterator::new(&encoder, solver, blocking_strategy);
     let all_models = solution_iterator.get_n_solutions(
-        &mut solver,
-        &blocking_strategy,
         Some(args.limit),
         args.print_fixed_points,
         args.print_update_rules,

@@ -226,15 +226,26 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
             .collect()
     }
 
-    /// Generate a formula blocking the current assignment to fixed-point state variables.
+    /// Generates a formula to block the current assignment to variables encoding either
+    /// the specified fixed-point `state` or all fixed-point states combined.
     ///
-    /// Asserting this prevents the solver from returning the exact same assignment to all
-    /// variables in the fixed-point states.
-    pub fn generate_fixed_point_blocker(&self, model: &Model) -> Result<Bool, anyhow::Error> {
+    /// Asserting this ensures that in the next model, at least one of these state variables
+    /// must evaluate to a different value.
+    pub fn generate_fixed_point_blocker(
+        &self,
+        model: &Model,
+        state: Option<String>,
+    ) -> Result<Bool, anyhow::Error> {
         let mut eq_atoms: Vec<Bool> = Vec::new();
 
         // For each state, extract the SMT variable values and create equalities
-        for state_map in self.state_atoms.values() {
+        for (state_name, state_map) in &self.state_atoms {
+            if let Some(target_name) = &state
+                && state_name != target_name
+            {
+                continue;
+            }
+
             for var_atom in state_map.values() {
                 let dynamic = Dynamic::from_ast(var_atom.as_dyn_ref());
                 let model_value = model_eval_int(&dynamic, model) as u64;
