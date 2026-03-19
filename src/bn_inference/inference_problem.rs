@@ -2,7 +2,7 @@ use crate::bn_inference::constraints::{RegulatorIsEssential, RegulatorIsMonotone
 use crate::bn_inference::{DynInferenceConstraint, InferenceConstraint};
 use crate::smt_solver::AbstractMonotoneBoundedIntSolver;
 use crate::smt_solver::typed_ast::{AstType, TypedAst};
-use biodivine_lib_param_bn::{Monotonicity, RegulatoryGraph, VariableId};
+use biodivine_lib_param_bn::{RegulatoryGraph, VariableId};
 use std::collections::BTreeSet;
 use std::ops::{Index, IndexMut};
 use z3::{Sort, SortKind};
@@ -211,23 +211,13 @@ impl<SOLVER: AbstractMonotoneBoundedIntSolver + 'static> InferenceProblem<SOLVER
         }
 
         // Declare all monotonic inputs (these need to go first):
-        for reg in rg.regulations() {
-            if let Some(monotonicity) = reg.monotonicity {
-                let constraint = RegulatorIsMonotone::new(
-                    reg.target,
-                    reg.regulator,
-                    monotonicity == Monotonicity::Activation,
-                );
-                self.assert_constraint(constraint)?;
-            }
+        for c in RegulatorIsMonotone::read_from(rg) {
+            self.assert_constraint(c)?;
         }
 
         // Declare all essential inputs:
-        for reg in rg.regulations() {
-            if reg.observable {
-                let constraint = RegulatorIsEssential::new(reg.target, reg.regulator);
-                self.assert_constraint(constraint)?;
-            }
+        for c in RegulatorIsEssential::read_from(rg) {
+            self.assert_constraint(c)?;
         }
 
         Ok(())

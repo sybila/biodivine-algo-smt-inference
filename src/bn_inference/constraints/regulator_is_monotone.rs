@@ -1,7 +1,7 @@
 use crate::bn_inference::constraints::{check_regulator_exists, check_variable_exists};
 use crate::bn_inference::{InferenceConstraint, InferenceProblem, InferenceProblemEncoder};
 use crate::smt_solver::AbstractMonotoneSolver;
-use biodivine_lib_param_bn::VariableId;
+use biodivine_lib_param_bn::{Monotonicity, RegulatoryGraph, VariableId};
 use log::info;
 
 pub struct RegulatorIsMonotone {
@@ -25,6 +25,21 @@ impl RegulatorIsMonotone {
 
     pub fn new_negative(target: VariableId, regulator: VariableId) -> Self {
         Self::new(target, regulator, false)
+    }
+
+    /// Read all monotonicity constraints from a given [`RegulatorIsMonotone`].
+    pub fn read_from(psbn: &RegulatoryGraph) -> Vec<RegulatorIsMonotone> {
+        psbn.regulations()
+            .filter_map(|it| {
+                it.get_monotonicity().map(|monotonicity| {
+                    Self::new(
+                        it.target,
+                        it.regulator,
+                        monotonicity == Monotonicity::Activation,
+                    )
+                })
+            })
+            .collect()
     }
 }
 
