@@ -1,10 +1,13 @@
 use crate::bn_inference::SimpleInferenceConstraint;
+use crate::bn_inference::constraints::ConstraintStrings;
 use crate::smt_solver::AbstractOptimizeSolver;
 use anyhow::Error;
 use biodivine_algo_smt_inference::bn_inference::{
     InferenceConstraint, InferenceProblem, InferenceProblemEncoder,
 };
+use biodivine_lib_param_bn::ModelAnnotation;
 use num_rational::BigRational;
+use num_traits::One;
 use std::marker::PhantomData;
 use z3::Symbol;
 
@@ -45,6 +48,41 @@ impl<SOLVER: AbstractOptimizeSolver, C: SimpleInferenceConstraint<SOLVER>>
             weight,
             _phantom: Default::default(),
         }
+    }
+}
+
+impl<
+    SOLVER: AbstractOptimizeSolver + 'static,
+    INNER: SimpleInferenceConstraint<SOLVER> + InferenceConstraint<SOLVER>,
+> SoftConstraint<SOLVER, INNER>
+{
+    /// Wraps a given constraint into a soft constraint if applicable
+    /// based on the provided model annotation.
+    ///
+    /// The soft constraint is created if the annotation contains either a valid `weight` or
+    /// `priority-class` key. If neither is provided, it remains a hard constraint.
+    pub fn wrap_if_soft(
+        inner: INNER,
+        metadata: &ModelAnnotation,
+    ) -> Result<Box<dyn InferenceConstraint<SOLVER>>, Error> {
+        let mut priority_class: Option<u32> = None;
+        if let Some(class) = metadata.get_value(&[ConstraintStrings::PRIORITY_CLASS]) {
+            priority_class = Some(class.parse::<u32>()?);
+        };
+        let mut weight: Option<BigRational> = None;
+        if let Some(weight_str) = metadata.get_value(&[ConstraintStrings::WEIGHT]) {
+            weight = Some(big_rational_str::str_to_big_rational(weight_str)?);
+        };
+        if priority_class.is_none() && weight.is_none() {
+            return Ok(Box::new(inner));
+        };
+        let priority_class = priority_class.unwrap_or(0u32);
+        let weight = weight.unwrap_or(BigRational::one());
+        Ok(Box::new(Self::with_weight_and_class(
+            inner,
+            weight,
+            priority_class,
+        )))
     }
 }
 

@@ -3,6 +3,23 @@ use crate::bn_inference::inference_problem::VariableData;
 use anyhow::anyhow;
 use biodivine_lib_param_bn::VariableId;
 
+pub struct ConstraintStrings();
+
+impl ConstraintStrings {
+    pub const PRIORITY_CLASS: &str = "priority-class";
+    pub const WEIGHT: &str = "weight";
+    pub const STATE: &str = "state";
+    pub const FIXED_POINT: &str = "fixed-point";
+    pub const COMPARISON: &str = "comparison";
+
+    pub const EQUAL: &str = "equal";
+    pub const NOT_EQUAL: &str = "not-equal";
+    pub const LESS: &str = "less";
+    pub const LESS_EQUAL: &str = "less-equal";
+    pub const GREATER: &str = "greater";
+    pub const GREATER_EQUAL: &str = "greater-equal";
+}
+
 pub fn check_state_exists<S: 'static>(
     problem: &InferenceProblem<S>,
     state: &str,
