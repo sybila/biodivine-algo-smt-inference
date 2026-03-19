@@ -48,6 +48,10 @@ struct Arguments {
     #[clap(long, default_value = "false")]
     print_update_rules: bool,
 
+    /// If set to `true`, the solver will also print the inferred state valuations.
+    #[clap(long, default_value = "false")]
+    print_state_valuations: bool,
+
     /// Log level verbosity. Flag `-v` sets log level to 'info'. Manually, you can specify: trace, debug, info, warn, or error.
     #[arg(long, short, num_args = 0..=1, default_missing_value = "info", require_equals = true)]
     verbose: Option<String>,
@@ -176,6 +180,18 @@ fn main() -> Result<(), anyhow::Error> {
                 Err(err) => {
                     error!("Unable to decode boolean network. {err}",);
                 }
+            }
+        }
+
+        if args.print_state_valuations {
+            println!("=== State table ===");
+            for state in encoder.problem.states() {
+                let decoded = encoder.decode_state(&state, &model);
+                let named = decoded
+                    .into_iter()
+                    .map(|(a, b)| (psbn.get_variable_name(a), b))
+                    .collect::<BTreeMap<_, _>>();
+                println!("State `{state}`: {:?}", named);
             }
         }
 
