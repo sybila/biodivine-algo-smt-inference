@@ -1,0 +1,25 @@
+a -?? b
+b -?? c
+c -?? a
+
+#! state : declare : s1
+#! state : declare : s2
+#! state : declare : s3
+
+# s2 is a successor of s1:
+
+#! comparison : equal : `$a/s1` : `s2/a` :
+#! comparison : equal : `$b/s1` : `s2/b` :
+#! comparison : equal : `$c/s1` : `s2/c` :
+
+# s3 is a successor of s2:
+
+#! comparison : equal : `$a/s2` : `s3/a` :
+#! comparison : equal : `$b/s2` : `s3/b` :
+#! comparison : equal : `$c/s2` : `s3/c` :
+
+# s1 is a successor of s3:
+
+#! comparison : equal : `$a/s3` : `s1/a` :
+#! comparison : equal : `$b/s3` : `s1/b` :
+#! comparison : equal : `$c/s3` : `s1/c` :

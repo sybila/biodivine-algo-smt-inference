@@ -1,0 +1,16 @@
+a -? b
+
+#! state : declare : s1
+#! state : declare : s2
+
+#! state : not_equal : s1 : s2 :
+
+# In this configuration, it is possible to create only one
+# fixed-point. The second state is chosen according to the
+# inequalities.
+
+#! state : fixed_point : s1 : priority_class : 0
+#! state : fixed_point : s2 : priority_class : 0
+
+#! comparison : less : `s1/a` : `s2/a` : priority_class : 1
+#! comparison : less : `s2/b` : `s1/b` : priority_class : 1
