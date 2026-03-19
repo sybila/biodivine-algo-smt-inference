@@ -1,6 +1,4 @@
-use biodivine_algo_smt_inference::bn_inference::constraints::{
-    StateHasExactObservation, StateIsFixedPoint, StateObservation,
-};
+use biodivine_algo_smt_inference::bn_inference::constraints::{StateIsFixedPoint, ValueComparison};
 use biodivine_algo_smt_inference::bn_inference::{InferenceProblem, InferenceProblemEncoder};
 use biodivine_algo_smt_inference::smt_solver::{
     AbstractSolver, BoundedIntSolver, DynMonotoneBoundedIntSolver, InstantiatedMonotoneSolver,
@@ -136,23 +134,19 @@ fn main() -> Result<(), anyhow::Error> {
     inference_problem.initialize_regulations(psbn.as_graph())?;
 
     // Declare all fixed-points:
-    for (name, observation) in observations {
-        assert!(inference_problem.declare_state(name.as_str()));
-        let observation = psbn
-            .variables()
-            .filter_map(|var| {
-                observation
-                    .get(psbn.get_variable_name(var))
-                    .map(|it| (var, *it))
-            })
-            .collect::<Vec<_>>();
-        let observation = StateObservation::from_exact(observation);
-        // Here, we ignore observation weights and just assert them all as hard constraints:
-        let obs_constraint =
-            StateHasExactObservation::new(name.as_str(), observation.all_observations());
-        let fix_constraint = StateIsFixedPoint::new(name.as_str());
-        inference_problem.assert_constraint(obs_constraint)?;
+    for (state_name, observation) in &observations {
+        assert!(inference_problem.declare_state(state_name.as_str()));
+        let fix_constraint = StateIsFixedPoint::new(state_name.as_str());
         inference_problem.assert_constraint(fix_constraint)?;
+        // Here, we ignore observation weights (if any) and just assert them all as hard constraints:
+        for (var_name, value) in observation {
+            let var_id = psbn
+                .as_graph()
+                .find_variable(var_name)
+                .unwrap_or_else(|| panic!("Unknown variable: `{}`", var_name));
+            let constraint = ValueComparison::variable_assignment(state_name, var_id, *value);
+            inference_problem.assert_constraint(constraint)?;
+        }
     }
 
     info!("Inference problem initialized. Creating constraints.");

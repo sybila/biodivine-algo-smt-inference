@@ -1,7 +1,9 @@
 use crate::bn_inference::constraints::{check_state_exists, check_variable_exists, sorted_map};
 use crate::smt_solver::typed_ast::AstType;
 use anyhow::anyhow;
-use biodivine_algo_smt_inference::bn_inference::constraints::ConstraintStrings;
+use biodivine_algo_smt_inference::bn_inference::constraints::{
+    ConstraintStrings, check_variable_domain,
+};
 use biodivine_algo_smt_inference::bn_inference::{
     InferenceProblem, InferenceProblemEncoder, SimpleInferenceConstraint,
 };
@@ -217,6 +219,37 @@ pub struct ValueComparison {
 impl ValueComparison {
     pub fn new(left: ComparedValue, op: CmpOp, right: ComparedValue) -> Self {
         ValueComparison { left, op, right }
+    }
+
+    /// Create a [`ValueComparison`] asserting that `variable == value` in a specific `state`.
+    pub fn variable_assignment(state: &str, variable: VariableId, value: u32) -> Self {
+        ValueComparison {
+            left: ComparedValue::VariableInState(state.to_string(), variable),
+            op: CmpOp::Equal,
+            right: ComparedValue::Constant(value),
+        }
+    }
+
+    /// If this value comparison corresponds to `state/var = const`, return the assignment
+    /// as a tuple. This can be used for value propagation.
+    ///
+    /// TODO:
+    ///     Currently, this is the only supported format for assignments. In the future, we could
+    ///     expand this to (a) include the symmetric form; (b) do some additional value propagation.
+    ///     For example, if a variable is Boolean, then `state1/var < state2/var` implies that
+    ///     `state1/var = 0` and `state2/var = 1`. And so on...
+    pub fn as_assignment(&self) -> Option<(String, VariableId, u32)> {
+        let ComparedValue::VariableInState(state, variable) = &self.left else {
+            return None;
+        };
+        let ComparedValue::Constant(value) = &self.right else {
+            return None;
+        };
+        if self.op != CmpOp::Equal {
+            return None;
+        };
+
+        Some((state.clone(), *variable, *value))
     }
 
     /// Read all value comparisons from the given model annotations.

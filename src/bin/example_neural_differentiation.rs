@@ -1,5 +1,5 @@
 use biodivine_algo_smt_inference::bn_inference::constraints::{
-    StateHasExactObservation, StateHasWeightedObservation, StateIsFixedPoint,
+    SoftConstraint, StateIsFixedPoint, ValueComparison,
 };
 use biodivine_algo_smt_inference::bn_inference::{InferenceProblem, InferenceProblemEncoder};
 use biodivine_algo_smt_inference::deprecated::state_specification::StateSpecification;
@@ -130,17 +130,19 @@ fn main() -> Result<(), anyhow::Error> {
 
     for (cell, spec) in observations.iter() {
         assert!(inference_problem.declare_state(cell.as_str()));
-        let observation = spec.to_observation();
-        let hard_obs_constraint =
-            StateHasExactObservation::new(cell.as_str(), observation.only_exact_observations());
-        let soft_obs_constraint = StateHasWeightedObservation::new(
-            cell.as_str(),
-            observation.only_weighted_observations(),
-        );
         let fix_constraint = StateIsFixedPoint::new(cell.as_str());
-        inference_problem.assert_constraint(hard_obs_constraint)?;
-        inference_problem.assert_constraint(soft_obs_constraint)?;
         inference_problem.assert_constraint(fix_constraint)?;
+
+        for (var, value) in spec.make_required_assertion_map() {
+            let constraint = ValueComparison::variable_assignment(cell, var, u32::from(value));
+            inference_problem.assert_constraint(constraint)?;
+        }
+
+        for (var, (value, weight)) in spec.make_optional_assertion_map() {
+            let constraint = ValueComparison::variable_assignment(cell, var, u32::from(value));
+            let constraint = SoftConstraint::with_weight(constraint, weight);
+            inference_problem.assert_constraint(constraint)?;
+        }
     }
 
     println!("Starting solver...");

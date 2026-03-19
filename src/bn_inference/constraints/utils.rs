@@ -76,13 +76,3 @@ pub fn check_variable_domain<S: 'static>(
     }
     Ok(())
 }
-
-pub fn check_state_observation<S: 'static>(
-    problem: &InferenceProblem<S>,
-    observation: impl Iterator<Item = (VariableId, u32)>,
-) -> Result<(), anyhow::Error> {
-    for (variable, observation) in observation {
-        check_variable_domain(problem, variable, observation)?;
-    }
-    Ok(())
-}
