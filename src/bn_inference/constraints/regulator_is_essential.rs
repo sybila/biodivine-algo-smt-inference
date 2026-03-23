@@ -2,7 +2,7 @@ use crate::bn_inference::constraints::{check_regulator_exists, check_variable_ex
 use crate::bn_inference::{InferenceConstraint, InferenceProblem, InferenceProblemEncoder};
 use crate::smt_solver::AbstractBoundedIntSolver;
 use crate::smt_solver::typed_ast::AstType;
-use biodivine_lib_param_bn::VariableId;
+use biodivine_lib_param_bn::{RegulatoryGraph, VariableId};
 use log::info;
 
 pub struct RegulatorIsEssential {
@@ -13,6 +13,14 @@ pub struct RegulatorIsEssential {
 impl RegulatorIsEssential {
     pub fn new(target: VariableId, regulator: VariableId) -> Self {
         Self { target, regulator }
+    }
+
+    /// Read all essentiality constraints from a given [`RegulatoryGraph`].
+    pub fn read_from(psbn: &RegulatoryGraph) -> Vec<RegulatorIsEssential> {
+        psbn.regulations()
+            .filter(|it| it.is_observable())
+            .map(|it| Self::new(it.target, it.regulator))
+            .collect()
     }
 }
 

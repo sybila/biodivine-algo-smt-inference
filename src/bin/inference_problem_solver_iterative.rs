@@ -1,7 +1,5 @@
 use biodivine_algo_smt_inference::bn_inference::BlockingStrategy;
-use biodivine_algo_smt_inference::bn_inference::constraints::{
-    StateHasExactObservation, StateHasWeightedObservation, StateIsFixedPoint, StateObservation,
-};
+use biodivine_algo_smt_inference::bn_inference::constraints::{StateIsFixedPoint, ValueComparison};
 use biodivine_algo_smt_inference::bn_inference::{
     InferenceProblem, InferenceProblemEncoder, InferenceSolverIterator,
 };
@@ -13,8 +11,6 @@ use biodivine_lib_param_bn::{BooleanNetwork, ModelAnnotation};
 use clap::Parser;
 use clap::builder::PossibleValuesParser;
 use log::info;
-use num_rational::BigRational;
-use num_traits::FromPrimitive;
 use std::collections::BTreeMap;
 
 #[derive(Parser)]
@@ -48,9 +44,9 @@ struct Arguments {
     #[clap(long, default_value = "false")]
     print_update_rules: bool,
 
-    /// If set to `true`, the solver will print the inferred fixed point states.
+    /// If set to `true`, the solver will also print the inferred state valuations.
     #[clap(long, default_value = "false")]
-    print_fixed_points: bool,
+    print_state_valuations: bool,
 
     /// Log level verbosity. Flag `-v` sets log level to 'info'. Manually, you can specify: trace, debug, info, warn, or error.
     #[arg(long, short, num_args = 0..=1, default_missing_value = "info", require_equals = true)]
@@ -94,6 +90,8 @@ fn main() -> Result<(), anyhow::Error> {
     info!("Loading observations and collecting fixed-point specification...");
 
     let annotations = ModelAnnotation::from_model_string(&model_string);
+
+    // TODO: Switch to the newer annotations variant.
     let mut observations = BTreeMap::new();
     if let Some(fix_node) = annotations.get_child(&["fix"]) {
         for (fp_id, fp_values) in fix_node.children() {
@@ -129,6 +127,8 @@ fn main() -> Result<(), anyhow::Error> {
     // We have to explicitly initialize the inference problem with influence graph constraints
     // to make sure the variable domains are correctly included.
 
+    // TODO: Switch to the newer intialization variant.
+
     // Declare all variables:
     for var in psbn.variables() {
         let name = psbn.get_variable_name(var);
@@ -142,36 +142,27 @@ fn main() -> Result<(), anyhow::Error> {
 
     inference_problem.initialize_regulations(psbn.as_graph())?;
 
-    // Declare all fixed-points:
-    for (name, observation) in &observations {
-        assert!(inference_problem.declare_state(name.as_str()));
-        let observation = psbn
-            .variables()
-            .filter_map(|var| {
-                observation
-                    .get(psbn.get_variable_name(var))
-                    .map(|it| (var, *it))
-            })
-            .collect::<Vec<_>>();
+    // TODO: Switch to the newer fixed-point contstraint definition variant.
 
-        let observation = StateObservation::from_uniformly_weighted(
-            observation,
-            BigRational::from_f32(0.5).unwrap(),
-        );
-        // Here, we ignore observation weights and just assert them all as hard constraints:
-        let hard_obs_constraint =
-            StateHasExactObservation::new(name.as_str(), observation.only_exact_observations());
-        let soft_obs_constraint = StateHasWeightedObservation::new(
-            name.as_str(),
-            observation.only_weighted_observations(),
-        );
-        let fix_constraint = StateIsFixedPoint::new(name.as_str());
-        inference_problem.assert_constraint(hard_obs_constraint)?;
-        inference_problem.assert_constraint(soft_obs_constraint)?;
+    // Declare all fixed-points:
+    for (state_name, observation) in &observations {
+        assert!(inference_problem.declare_state(state_name.as_str()));
+        let fix_constraint = StateIsFixedPoint::new(state_name.as_str());
         inference_problem.assert_constraint(fix_constraint)?;
+        // Here, we ignore observation weights (if any) and just assert them all as hard constraints:
+        for (var_name, value) in observation {
+            let var_id = psbn
+                .as_graph()
+                .find_variable(var_name)
+                .unwrap_or_else(|| panic!("Unknown variable: `{}`", var_name));
+            let constraint = ValueComparison::variable_assignment(state_name, var_id, *value);
+            inference_problem.assert_constraint(constraint)?;
+        }
     }
 
-    info!("Inference problem initialized. Creating constraints.");
+    inference_problem.initialize_constraints(&psbn, &annotations)?;
+
+    info!("Inference problem initialized. Creating solver...");
 
     let encoder = InferenceProblemEncoder::new(
         inference_problem,
@@ -188,7 +179,7 @@ fn main() -> Result<(), anyhow::Error> {
     let mut solution_iterator = InferenceSolverIterator::new(&encoder, solver, blocking_strategy);
     let all_models = solution_iterator.get_n_solutions(
         Some(args.limit),
-        args.print_fixed_points,
+        args.print_state_valuations,
         args.print_update_rules,
         |_| Ok(()),
     );

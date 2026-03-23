@@ -1,4 +1,3 @@
-use crate::bn_inference::constraints::StateObservation;
 use biodivine_lib_param_bn::VariableId;
 use num_rational::BigRational;
 use num_traits::{One, Zero};
@@ -59,26 +58,5 @@ impl StateSpecification {
                 }
             })
             .collect()
-    }
-
-    pub fn to_observation(&self) -> StateObservation {
-        let copy = self
-            .0
-            .iter()
-            .map(|(a, (b, c))| {
-                (
-                    *a,
-                    (
-                        u32::from(*b),
-                        if *c < BigRational::one() {
-                            Some(c.clone())
-                        } else {
-                            None
-                        },
-                    ),
-                )
-            })
-            .collect::<Vec<_>>();
-        StateObservation::from_weighted(copy)
     }
 }

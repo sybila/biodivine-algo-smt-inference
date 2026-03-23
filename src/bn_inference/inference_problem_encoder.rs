@@ -1,5 +1,5 @@
 use crate::bn_inference::InferenceProblem;
-use crate::bn_inference::constraints::StateHasExactObservation;
+use crate::bn_inference::constraints::ValueComparison;
 use crate::smt_solver::typed_ast::{AstType, MapDynAst, TypedAst};
 use crate::smt_solver::{
     AbstractBoundedIntSolver, AbstractMonotoneSolver, AbstractSolver, IntFunction, model_eval_int,
@@ -55,27 +55,24 @@ impl<SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<SOLVER>
         };
 
         if propagate_observations {
-            // TODO: Currently, this ignores hard constraints in weighted observations.
             // For each state, find observations that reason about this state. In these observations,
             // detect exact observations and use those to replace current free atoms with known
             // state values.
             for constraint in encoder.problem.constraints() {
-                if let Some(constraint) = constraint.downcast_ref::<StateHasExactObservation>() {
-                    let atoms = encoder
-                        .state_atoms
-                        .get_mut(constraint.state())
-                        .expect("Unreachable: State must exist.");
-                    for (var, val) in constraint.observations() {
-                        let val_const = encoder.problem[var].ast_type().new_value(val);
-                        atoms.insert(var, val_const);
-                    }
-                    info!(
-                        "Propagated {}/{} atoms in state `{}`.",
-                        constraint.len(),
-                        atoms.len(),
-                        constraint.state()
-                    );
-                }
+                let Some(constraint) = constraint.downcast_ref::<ValueComparison>() else {
+                    continue;
+                };
+                let Some((state, var, value)) = constraint.as_assignment() else {
+                    continue;
+                };
+
+                let atoms = encoder
+                    .state_atoms
+                    .get_mut(&state)
+                    .expect("Unreachable: State must exist.");
+                let val_const = encoder.problem[var].ast_type().new_value(value);
+                atoms.insert(var, val_const);
+                info!("Propagated value of `{var:?}` in state `{state}` to `{value}.");
             }
         }
 
@@ -200,28 +197,21 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
         TypedAst::cast_dynamic(variable.ast_type(), function_call)
     }
 
-    /// Extract the state map inferred for the given named state.
-    pub fn decode_state_map(&self, state: &str, model: &Model) -> BTreeMap<VariableId, usize> {
-        self.state_atoms
+    /// Extract the valuation of variables in the given state according to the provided Z3 model.
+    ///
+    /// # Panics
+    ///
+    /// The state must exist in this [`InferenceProblemEncoder`].
+    pub fn decode_state(&self, state: &str, model: &Model) -> BTreeMap<VariableId, u32> {
+        let atoms = self
+            .state_atoms
             .get(state)
-            .unwrap_or_else(|| panic!("Unknown state `{state}`."))
+            .unwrap_or_else(|| panic!("Unknown state `{state}`."));
+        atoms
             .iter()
-            .map(|(variable, ast)| {
-                let dynamic = Dynamic::from_ast(ast.as_dyn_ref());
-                (*variable, model_eval_int(&dynamic, model) as usize)
-            })
-            .collect()
-    }
-
-    /// Extract the state inferred for the given named state.
-    pub fn decode_state(&self, state: &str, model: &Model) -> Vec<usize> {
-        self.state_atoms
-            .get(state)
-            .unwrap_or_else(|| panic!("Unknown state `{state}`."))
-            .values()
-            .map(|ast| {
-                let dynamic = Dynamic::from_ast(ast.as_dyn_ref());
-                model_eval_int(&dynamic, model) as usize
+            .map(|(var, ast)| {
+                let eval = model_eval_int(&Dynamic::from_ast(ast.as_dyn_ref()), model);
+                (*var, eval)
             })
             .collect()
     }

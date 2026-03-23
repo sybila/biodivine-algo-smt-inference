@@ -20,6 +20,9 @@ pub trait InferenceConstraint<SOLVER>: Downcast {
 
 impl_downcast!(InferenceConstraint<SOLVER>);
 
+/// A boxed, dynamic variant of [`InferenceConstraint`].
+pub type DynInferenceConstraint<SOLVER> = Box<dyn InferenceConstraint<SOLVER>>;
+
 /// A simplified variant of [`InferenceConstraint`] that is used in situations where
 /// the whole constraint can be expressed as a single formula, without requiring addition
 /// interaction with the solver or other special treatment.
