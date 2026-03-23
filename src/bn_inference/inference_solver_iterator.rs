@@ -134,9 +134,9 @@ impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceSolverIterator<'a, S
 
             let blocker =
                 match self.blocking_strategy {
-                    BlockingStrategy::StateValuation => {
-                        self.encoder.generate_state_valuation_blocker(&model, None)
-                    }
+                    BlockingStrategy::StateValuation => self
+                        .encoder
+                        .generate_state_valuation_blocker(&model, None, None),
                     BlockingStrategy::FunctionPoints => self
                         .encoder
                         .generate_function_points_blocker(&model, None, &self.unique_fn_calls),

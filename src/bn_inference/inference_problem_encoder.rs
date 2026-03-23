@@ -216,27 +216,36 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
             .collect()
     }
 
-    /// Generates a formula to block the current assignment to variables encoding either
-    /// the specified `state` or the combination of all declared states.
+    /// Generates a formula to block the current assignment to SMT variables encoding either
+    /// the specified `state` or the combination of all declared states. If `network_variable` is
+    /// specified, only SMT variables representing values assigned to this network variable are
+    /// considered.
     ///
-    /// Asserting this ensures that in the next model, at least one of these state variables
+    /// Asserting this ensures that in the next model, at least one of these SMT state variables
     /// must evaluate to a different value.
     pub fn generate_state_valuation_blocker(
         &self,
         model: &Model,
-        state: Option<String>,
+        blocked_state: Option<String>,
+        blocked_bn_variable: Option<VariableId>,
     ) -> Result<Bool, anyhow::Error> {
         let mut eq_atoms: Vec<Bool> = Vec::new();
 
         // For each state, extract the SMT variable values and create equalities
         for (state_name, state_map) in &self.state_atoms {
-            if let Some(target_name) = &state
+            if let Some(target_name) = &blocked_state
                 && state_name != target_name
             {
                 continue;
             }
 
-            for var_atom in state_map.values() {
+            for (bn_var, var_atom) in state_map {
+                if let Some(target_bn_var) = &blocked_bn_variable
+                    && bn_var != target_bn_var
+                {
+                    continue;
+                }
+
                 let dynamic = Dynamic::from_ast(var_atom.as_dyn_ref());
                 let model_value = model_eval_int(&dynamic, model) as u64;
                 let ast_model_value = match var_atom.ast_type() {
