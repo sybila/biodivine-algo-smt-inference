@@ -1,14 +1,60 @@
 use std::collections::BTreeMap;
+use std::str::FromStr;
 
+use anyhow::anyhow;
+use biodivine_lib_param_bn::BooleanNetwork;
 use z3::ast::Dynamic;
 
 use crate::bn_inference::InferenceProblemEncoder;
 use crate::smt_solver::{AbstractMonotoneSolver, collect_asserted_fn_calls};
 
+#[derive(Debug, Clone)]
 pub enum BlockingStrategy {
-    StateValuation,
-    FunctionPoints,
-    Combined,
+    // Block state valuations, either just for a specified BN variable or for all.
+    StateValuations(Option<String>),
+    // Block function interpretation, either just for a function of the specified
+    // BN variable or for all functions.
+    FunctionPoints(Option<String>),
+}
+
+impl BlockingStrategy {
+    pub fn validate(&self, bn: &BooleanNetwork) -> Result<(), anyhow::Error> {
+        match &self {
+            BlockingStrategy::StateValuations(Some(var))
+            | BlockingStrategy::FunctionPoints(Some(var)) => {
+                if bn.as_graph().find_variable(var).is_none() {
+                    Err(anyhow!("Invalid BN variable {var} in blocking strategy."))
+                } else {
+                    Ok(())
+                }
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
+// This trait tells Clap how to turn the User's String into your Enum
+impl FromStr for BlockingStrategy {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<&str> = s.splitn(2, ':').collect();
+
+        match parts[0] {
+            "state-valuations" => {
+                let name = parts.get(1).map(|&s| s.to_string());
+                Ok(BlockingStrategy::StateValuations(name))
+            }
+            "function-points" => {
+                let name = parts.get(1).map(|&s| s.to_string());
+                Ok(BlockingStrategy::FunctionPoints(name))
+            }
+            _ => Err(format!(
+                "Unknown blocker: {}. Valid: state-valuations, function-points, combined",
+                parts[0]
+            )),
+        }
+    }
 }
 
 /// Iterates through solutions provided by a prepared solver, using an encoder
@@ -43,10 +89,8 @@ impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceSolverIterator<'a, S
         // For some blocking strategies involving functions, we precompute all
         // unique function occurances in the original solver assertions.
         let unique_fn_calls: BTreeMap<String, Vec<Dynamic>> = match blocking_strategy {
-            BlockingStrategy::StateValuation => BTreeMap::new(),
-            BlockingStrategy::FunctionPoints | BlockingStrategy::Combined => {
-                collect_asserted_fn_calls(&solver)
-            }
+            BlockingStrategy::StateValuations(..) => BTreeMap::new(),
+            BlockingStrategy::FunctionPoints(..) => collect_asserted_fn_calls(&solver),
         };
 
         InferenceSolverIterator {
@@ -132,16 +176,27 @@ impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceSolverIterator<'a, S
                 break;
             }
 
-            let blocker =
-                match self.blocking_strategy {
-                    BlockingStrategy::StateValuation => self
-                        .encoder
-                        .generate_state_valuation_blocker(&model, None, None),
-                    BlockingStrategy::FunctionPoints => self
-                        .encoder
-                        .generate_function_points_blocker(&model, None, &self.unique_fn_calls),
-                    BlockingStrategy::Combined => todo!(),
-                };
+            let blocker = match &self.blocking_strategy {
+                BlockingStrategy::StateValuations(bn_var_name) => {
+                    let bn_var = bn_var_name
+                        .as_ref()
+                        .map(|v_name| self.encoder.problem.find_variable(v_name).unwrap());
+                    self.encoder
+                        .generate_state_valuation_blocker(&model, None, bn_var)
+                }
+                BlockingStrategy::FunctionPoints(bn_var_name) => {
+                    let fn_name = bn_var_name
+                        .as_ref()
+                        .map(|v_name| self.encoder.problem.find_variable(v_name).unwrap())
+                        .map(|v_id| self.encoder.update_function(v_id).name());
+
+                    self.encoder.generate_function_points_blocker(
+                        &model,
+                        fn_name,
+                        &self.unique_fn_calls,
+                    )
+                }
+            };
 
             // Generate and assert a blocking clause
             match blocker {

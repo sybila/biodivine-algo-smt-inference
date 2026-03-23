@@ -52,8 +52,14 @@ struct Arguments {
     verbose: Option<String>,
 
     /// Blocking strategy to use for enumeration.
-    #[clap(value_parser = PossibleValuesParser::new(["state-valuations", "function-points", "combined"]), default_value = "state-valuations")]
-    blocker: String,
+    ///
+    /// Use "state-valuations" or "state-valuations:VAR_NAME" to block valuations of SMT state variables
+    /// (if `VAR_NAME` is specified, only block assignments corresponding to a selected BN variable).
+    ///
+    /// Use "function-points" or "function-points:VAR_NAME" to block the function interpretation
+    /// (if `VAR_NAME` is specified, only block function corresponding to a selected BN variable).
+    #[arg(long, default_value = "state-valuations")]
+    blocker: BlockingStrategy,
 
     /// Maximum solutions that will be enumerated.
     #[clap(long = "limit", default_value_t = 1)]
@@ -88,6 +94,9 @@ fn main() -> Result<(), anyhow::Error> {
     let psbn = psbn.name_implicit_parameters();
     let psbn = Rc::new(psbn);
     let annotations = ModelAnnotation::from_model_string(&model_string);
+
+    let blocking_strategy = args.blocker;
+    blocking_strategy.validate(&psbn)?;
 
     info!("Building solver using `{}` encoding..", args.solver);
 
@@ -139,11 +148,10 @@ fn main() -> Result<(), anyhow::Error> {
     let encoder = Rc::new(encoder);
 
     info!(
-        "Checking for up to {} solutions using {} blocking strategy...",
-        args.limit, args.blocker
+        "Checking for up to {} solutions using {:?} blocking strategy...",
+        args.limit, blocking_strategy
     );
 
-    let blocking_strategy = get_blocking_strategy(&args.blocker);
     let mut solution_iterator = InferenceSolverIterator::new(&encoder, solver, blocking_strategy);
     let all_models = solution_iterator.get_n_solutions(
         Some(args.limit),
@@ -155,13 +163,4 @@ fn main() -> Result<(), anyhow::Error> {
     // Print 1/0 as the last piece of output:
     println!("{}", all_models.len());
     Ok(())
-}
-
-fn get_blocking_strategy(blocking_str: &str) -> BlockingStrategy {
-    match blocking_str {
-        "state-valuations" => BlockingStrategy::StateValuation,
-        "function-points" => BlockingStrategy::FunctionPoints,
-        "combined" => BlockingStrategy::Combined,
-        _ => panic!("Unsupported blocking strategy: {blocking_str}"),
-    }
 }
