@@ -1,3 +1,16 @@
+#!state:declare:fp_1
+#!state:declare:fp_2
+#! comparison : equal : fp_1/v_1: 1 : weight: 0.5
+#! comparison : equal : fp_1/v_2: 1 : weight: 0.5
+#! comparison : equal : fp_1/v_3: 1 : weight: 0.5
+#! comparison : equal : fp_1/v_4: 1 : weight: 0.5
+#! comparison : equal : fp_1/v_5: 0 : weight: 0.5
+#! comparison : equal : fp_2/v_1: 1 : weight: 0.5
+#! comparison : equal : fp_2/v_2: 0 : weight: 0.5
+#! comparison : equal : fp_2/v_3: 0 : weight: 0.5
+#! comparison : equal : fp_2/v_4: 0 : weight: 0.5
+#! comparison : equal : fp_2/v_5: 0 : weight: 0.5
+
 #position:v_1:369.94216985978284,259.95936260417164
 $v_1:(v_1 | (!v_5 | !v_4))
 v_1 -? v_1

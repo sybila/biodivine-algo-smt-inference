@@ -6,7 +6,7 @@ use crate::bn_inference::InferenceProblemEncoder;
 use crate::smt_solver::{AbstractMonotoneSolver, collect_asserted_fn_calls};
 
 pub enum BlockingStrategy {
-    FixedPoints,
+    StateValuation,
     FunctionPoints,
     Combined,
 }
@@ -43,7 +43,7 @@ impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceSolverIterator<'a, S
         // For some blocking strategies involving functions, we precompute all
         // unique function occurances in the original solver assertions.
         let unique_fn_calls: BTreeMap<String, Vec<Dynamic>> = match blocking_strategy {
-            BlockingStrategy::FixedPoints => BTreeMap::new(),
+            BlockingStrategy::StateValuation => BTreeMap::new(),
             BlockingStrategy::FunctionPoints | BlockingStrategy::Combined => {
                 collect_asserted_fn_calls(&solver)
             }
@@ -134,8 +134,8 @@ impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceSolverIterator<'a, S
 
             let blocker =
                 match self.blocking_strategy {
-                    BlockingStrategy::FixedPoints => {
-                        self.encoder.generate_fixed_point_blocker(&model, None)
+                    BlockingStrategy::StateValuation => {
+                        self.encoder.generate_state_valuation_blocker(&model, None)
                     }
                     BlockingStrategy::FunctionPoints => self
                         .encoder

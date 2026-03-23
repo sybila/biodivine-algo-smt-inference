@@ -217,11 +217,11 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
     }
 
     /// Generates a formula to block the current assignment to variables encoding either
-    /// the specified fixed-point `state` or all fixed-point states combined.
+    /// the specified `state` or the combination of all declared states.
     ///
     /// Asserting this ensures that in the next model, at least one of these state variables
     /// must evaluate to a different value.
-    pub fn generate_fixed_point_blocker(
+    pub fn generate_state_valuation_blocker(
         &self,
         model: &Model,
         state: Option<String>,
