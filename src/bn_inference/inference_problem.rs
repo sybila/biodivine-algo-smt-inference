@@ -1,8 +1,14 @@
-use crate::bn_inference::InferenceConstraint;
-use crate::bn_inference::constraints::{RegulatorIsEssential, RegulatorIsMonotone};
-use crate::smt_solver::AbstractMonotoneBoundedIntSolver;
+use crate::bn_inference::constraints::{
+    ConstraintStrings, RegulatorIsEssential, RegulatorIsMonotone, SoftConstraint, StateComparison,
+    StateIsFixedPoint, ValueComparison,
+};
+use crate::bn_inference::{DynInferenceConstraint, InferenceConstraint};
 use crate::smt_solver::typed_ast::{AstType, TypedAst};
-use biodivine_lib_param_bn::{Monotonicity, RegulatoryGraph, VariableId};
+use crate::smt_solver::{
+    AbstractMonotoneBoundedIntOptimizeSolver, AbstractMonotoneBoundedIntSolver,
+};
+use anyhow::anyhow;
+use biodivine_lib_param_bn::{BooleanNetwork, ModelAnnotation, RegulatoryGraph, VariableId};
 use std::collections::BTreeSet;
 use std::ops::{Index, IndexMut};
 use z3::{Sort, SortKind};
@@ -15,7 +21,7 @@ pub struct InferenceProblem<SOLVER> {
     /// to assert model properties.
     declared_abstract_states: BTreeSet<String>,
     /// List of constraints that must be satisfied by the inferred model.
-    inference_constraints: Vec<Box<dyn InferenceConstraint<SOLVER>>>,
+    inference_constraints: Vec<DynInferenceConstraint<SOLVER>>,
 }
 
 /// A data struct managing known information about one model variable within [`InferenceProblem`].
@@ -179,6 +185,19 @@ impl<SOLVER: 'static> InferenceProblem<SOLVER> {
         self.inference_constraints.push(Box::new(constraint));
         Ok(())
     }
+
+    /// Assert new dynamic inference constraint.
+    ///
+    /// Note that variables cannot be created or modified once any inference constraint
+    /// has been added to this [`InferenceProblem`] instance.
+    pub fn assert_dyn_constraint(
+        &mut self,
+        constraint: DynInferenceConstraint<SOLVER>,
+    ) -> Result<(), anyhow::Error> {
+        constraint.validate(self)?;
+        self.inference_constraints.push(constraint);
+        Ok(())
+    }
 }
 
 impl<SOLVER: AbstractMonotoneBoundedIntSolver + 'static> InferenceProblem<SOLVER> {
@@ -211,23 +230,92 @@ impl<SOLVER: AbstractMonotoneBoundedIntSolver + 'static> InferenceProblem<SOLVER
         }
 
         // Declare all monotonic inputs (these need to go first):
-        for reg in rg.regulations() {
-            if let Some(monotonicity) = reg.monotonicity {
-                let constraint = RegulatorIsMonotone::new(
-                    reg.target,
-                    reg.regulator,
-                    monotonicity == Monotonicity::Activation,
-                );
-                self.assert_constraint(constraint)?;
-            }
+        for c in RegulatorIsMonotone::read_from(rg) {
+            self.assert_constraint(c)?;
         }
 
         // Declare all essential inputs:
-        for reg in rg.regulations() {
-            if reg.observable {
-                let constraint = RegulatorIsEssential::new(reg.target, reg.regulator);
-                self.assert_constraint(constraint)?;
+        for c in RegulatorIsEssential::read_from(rg) {
+            self.assert_constraint(c)?;
+        }
+
+        Ok(())
+    }
+
+    /// Read all constraints from an annotated `.aeon` file, **ignoring** any weights
+    /// and priority classes, and assert them into the provided inference problem.
+    ///
+    /// This assumes that [`Self::initialize_regulations`] (or [`Self::from_influence_graph`])
+    /// was already called on to populate the inference problem with variables and regulations.
+    pub fn initialize_constraints(
+        &mut self,
+        psbn: &BooleanNetwork,
+        annotation: &ModelAnnotation,
+    ) -> Result<(), anyhow::Error> {
+        // First, go through all state declarations:
+        self.initialize_state_declarations(annotation)?;
+
+        // Then go through different types of constraints, parse them, and assert them.
+
+        for (c, _meta) in StateComparison::read_from::<SOLVER>(annotation)? {
+            self.assert_constraint(c)?;
+        }
+
+        for (c, _meta) in StateIsFixedPoint::read_from::<SOLVER>(annotation)? {
+            self.assert_constraint(c)?;
+        }
+
+        for (c, _meta) in ValueComparison::read_from::<SOLVER>(psbn, annotation)? {
+            self.assert_constraint(c)?;
+        }
+
+        Ok(())
+    }
+
+    fn initialize_state_declarations(
+        &mut self,
+        annotation: &ModelAnnotation,
+    ) -> Result<(), anyhow::Error> {
+        if let Some(declarations) =
+            annotation.get_value(&[ConstraintStrings::STATE, ConstraintStrings::DECLARE])
+        {
+            for name in declarations.lines() {
+                if !self.declare_state(name) {
+                    return Err(anyhow!("State `{name}` is declared more than once."));
+                }
             }
+        }
+        Ok(())
+    }
+}
+
+impl<SOLVER: AbstractMonotoneBoundedIntOptimizeSolver + 'static> InferenceProblem<SOLVER> {
+    /// Read all constraints from an annotated `.aeon` file, including any weights
+    /// and priority classes, and assert them into the provided inference problem.
+    ///
+    /// This assumes that [`Self::initialize_regulations`] (or [`Self::from_influence_graph`])
+    /// was already called on this inference problem.
+    pub fn initialize_constraints_and_weights(
+        &mut self,
+        psbn: &BooleanNetwork,
+        annotation: &ModelAnnotation,
+    ) -> Result<(), anyhow::Error> {
+        // First, go through all state declarations:
+        // First, go through all state declarations:
+        self.initialize_state_declarations(annotation)?;
+
+        // Then go through different types of constraints, parse them, and assert them.
+
+        for (c, meta) in StateComparison::read_from::<SOLVER>(annotation)? {
+            self.assert_dyn_constraint(SoftConstraint::wrap_if_soft(c, meta)?)?;
+        }
+
+        for (c, meta) in StateIsFixedPoint::read_from::<SOLVER>(annotation)? {
+            self.assert_dyn_constraint(SoftConstraint::wrap_if_soft(c, meta)?)?;
+        }
+
+        for (c, meta) in ValueComparison::read_from::<SOLVER>(psbn, annotation)? {
+            self.assert_dyn_constraint(SoftConstraint::wrap_if_soft(c, meta)?)?;
         }
 
         Ok(())

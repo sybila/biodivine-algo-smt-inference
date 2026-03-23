@@ -1,7 +1,33 @@
 use crate::bn_inference::InferenceProblem;
 use crate::bn_inference::inference_problem::VariableData;
 use anyhow::anyhow;
-use biodivine_lib_param_bn::VariableId;
+use biodivine_lib_param_bn::{ModelAnnotation, VariableId};
+use std::collections::{BTreeMap, HashMap};
+
+pub struct ConstraintStrings();
+
+impl ConstraintStrings {
+    pub const PRIORITY_CLASS: &str = "priority_class";
+    pub const WEIGHT: &str = "weight";
+    pub const STATE: &str = "state";
+    pub const FIXED_POINT: &str = "fixed_point";
+    pub const COMPARISON: &str = "comparison";
+    pub const DECLARE: &str = "declare";
+
+    pub const EQUAL: &str = "equal";
+    pub const NOT_EQUAL: &str = "not_equal";
+    pub const LESS: &str = "less";
+    pub const LESS_EQUAL: &str = "less_equal";
+    pub const GREATER: &str = "greater";
+    pub const GREATER_EQUAL: &str = "greater_equal";
+}
+
+/// A helper function which ensures we always go through the model annotations in a sorted order.
+pub fn sorted_map(
+    annotations: &HashMap<String, ModelAnnotation>,
+) -> BTreeMap<&String, &ModelAnnotation> {
+    BTreeMap::from_iter(annotations.iter())
+}
 
 pub fn check_state_exists<S: 'static>(
     problem: &InferenceProblem<S>,
@@ -48,16 +74,6 @@ pub fn check_variable_domain<S: 'static>(
             data.domain.0,
             data.domain.1
         ));
-    }
-    Ok(())
-}
-
-pub fn check_state_observation<S: 'static>(
-    problem: &InferenceProblem<S>,
-    observation: impl Iterator<Item = (VariableId, u32)>,
-) -> Result<(), anyhow::Error> {
-    for (variable, observation) in observation {
-        check_variable_domain(problem, variable, observation)?;
     }
     Ok(())
 }

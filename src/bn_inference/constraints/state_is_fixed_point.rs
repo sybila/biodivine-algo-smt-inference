@@ -1,7 +1,8 @@
-use crate::bn_inference::constraints::check_state_exists;
+use crate::bn_inference::constraints::{ConstraintStrings, check_state_exists, sorted_map};
 use crate::bn_inference::{InferenceProblem, InferenceProblemEncoder, SimpleInferenceConstraint};
 use crate::smt_solver::AbstractSolver;
 use anyhow::Error;
+use biodivine_lib_param_bn::ModelAnnotation;
 use log::{debug, info};
 use macros::InferenceConstraint;
 use z3::ast::Bool;
@@ -16,6 +17,24 @@ impl StateIsFixedPoint {
         Self {
             state: state.to_string(),
         }
+    }
+
+    /// Read all fixed-point states from the given model annotations.
+    ///
+    /// The method returns each constraint together with its metadata (again represented as
+    /// an annotation).
+    pub fn read_from<SOLVER: AbstractSolver + 'static>(
+        model_annotation: &ModelAnnotation,
+    ) -> Result<Vec<(Self, &ModelAnnotation)>, Error> {
+        let mut result = Vec::new();
+        let constraints =
+            model_annotation.get_child(&[ConstraintStrings::STATE, ConstraintStrings::FIXED_POINT]);
+        if let Some(constraints) = constraints {
+            for (state, inner) in sorted_map(constraints.children()) {
+                result.push((Self::new(state), inner));
+            }
+        }
+        Ok(result)
     }
 }
 

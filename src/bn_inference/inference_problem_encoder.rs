@@ -1,13 +1,14 @@
 use crate::bn_inference::InferenceProblem;
-use crate::bn_inference::constraints::StateHasExactObservation;
+use crate::bn_inference::constraints::ValueComparison;
 use crate::smt_solver::typed_ast::{MapDynAst, TypedAst};
 use crate::smt_solver::{
-    AbstractBoundedIntSolver, AbstractMonotoneSolver, AbstractSolver, IntFunction,
+    AbstractBoundedIntSolver, AbstractMonotoneSolver, AbstractSolver, IntFunction, model_eval_int,
 };
 use anyhow::anyhow;
 use biodivine_lib_param_bn::{BooleanNetwork, Regulation, RegulatoryGraph, VariableId};
 use log::info;
 use std::collections::BTreeMap;
+use z3::ast::Dynamic;
 use z3::{AstKind, FuncDecl, Model};
 
 /// A static collection of SMT formulas and declarations that are collectively used to
@@ -53,27 +54,24 @@ impl<SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<SOLVER>
         };
 
         if propagate_observations {
-            // TODO: Currently, this ignores hard constraints in weighted observations.
             // For each state, find observations that reason about this state. In these observations,
             // detect exact observations and use those to replace current free atoms with known
             // state values.
             for constraint in encoder.problem.constraints() {
-                if let Some(constraint) = constraint.downcast_ref::<StateHasExactObservation>() {
-                    let atoms = encoder
-                        .state_atoms
-                        .get_mut(constraint.state())
-                        .expect("Unreachable: State must exist.");
-                    for (var, val) in constraint.observations() {
-                        let val_const = encoder.problem[var].ast_type().new_value(val);
-                        atoms.insert(var, val_const);
-                    }
-                    info!(
-                        "Propagated {}/{} atoms in state `{}`.",
-                        constraint.len(),
-                        atoms.len(),
-                        constraint.state()
-                    );
-                }
+                let Some(constraint) = constraint.downcast_ref::<ValueComparison>() else {
+                    continue;
+                };
+                let Some((state, var, value)) = constraint.as_assignment() else {
+                    continue;
+                };
+
+                let atoms = encoder
+                    .state_atoms
+                    .get_mut(&state)
+                    .expect("Unreachable: State must exist.");
+                let val_const = encoder.problem[var].ast_type().new_value(value);
+                atoms.insert(var, val_const);
+                info!("Propagated value of `{var:?}` in state `{state}` to `{value}.");
             }
         }
 
@@ -196,6 +194,25 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
         // Make the function call and wrap it into `TypedAst`.
         let function_call = function.apply(&args.iter().dyn_vec());
         TypedAst::cast_dynamic(variable.ast_type(), function_call)
+    }
+
+    /// Extract the valuation of variables in the given state according to the provided Z3 model.
+    ///
+    /// # Panics
+    ///
+    /// The state must exist in this [`InferenceProblemEncoder`].
+    pub fn decode_state(&self, state: &str, model: &Model) -> BTreeMap<VariableId, u32> {
+        let atoms = self
+            .state_atoms
+            .get(state)
+            .unwrap_or_else(|| panic!("Unknown state `{state}`."));
+        atoms
+            .iter()
+            .map(|(var, ast)| {
+                let eval = model_eval_int(&Dynamic::from_ast(ast.as_dyn_ref()), model);
+                (*var, eval)
+            })
+            .collect()
     }
 }
 

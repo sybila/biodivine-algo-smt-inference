@@ -1,0 +1,16 @@
+a -?? b
+b -?? a
+
+#! state : declare : fix1
+#! state : declare : fix2
+
+#! state : not_equal : fix1 : fix2 :
+
+# For fixed-point one, use the general fixed-point constraint:
+
+#! state : fixed_point : fix1 :
+
+# For fixed-point two, simulate the constraint through value comparisons:
+
+#! comparison : equal : `$a/fix2` : `fix2/a` :
+#! comparison : equal : `$b/fix2` : `fix2/b` :

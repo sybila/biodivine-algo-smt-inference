@@ -151,8 +151,9 @@ impl TypedAst {
         self.ast_type().into()
     }
 
-    /// Produce a [`Bool`] expression that is equivalent to `self <= other`. Currently, this
-    /// operation is only supported if both ASTs are of the same type.
+    /// Produce a [`Bool`] expression that is equivalent to `self <= other`.
+    ///
+    /// Currently, this operation is only supported if both ASTs are of the same type.
     pub fn le(&self, other: &TypedAst) -> Result<Bool, anyhow::Error> {
         match (self, other) {
             (TypedAst::Int(a), TypedAst::Int(b)) => Ok(a.le(b)),
@@ -167,8 +168,26 @@ impl TypedAst {
         }
     }
 
-    /// Produce a [`Bool`] expression that is equivalent to `self == other`. Currently, this
-    /// operation is only supported if both ASTs are of the same type.
+    /// Produce a [`Bool`] expression that is equivalent to `self < other`.
+    ///
+    /// Currently, this operation is only supported if both ASTs are of the same type.
+    pub fn lt(&self, other: &TypedAst) -> Result<Bool, anyhow::Error> {
+        match (self, other) {
+            (TypedAst::Int(a), TypedAst::Int(b)) => Ok(a.lt(b)),
+            (TypedAst::Bool(a), TypedAst::Bool(b)) => Ok(Bool::and(&[a.not(), b.clone()])),
+            _ => Err(anyhow!(
+                "`{}` and `{}` are incomparable: `{:?} != {:?}`",
+                self,
+                other,
+                self.sort_kind(),
+                other.sort_kind()
+            )),
+        }
+    }
+
+    /// Produce a [`Bool`] expression that is equivalent to `self == other`.
+    ///
+    /// Currently, this operation is only supported if both ASTs are of the same type.
     pub fn eq(&self, other: &TypedAst) -> Result<Bool, anyhow::Error> {
         match (self, other) {
             (TypedAst::Int(a), TypedAst::Int(b)) => Ok(a.eq(b)),
