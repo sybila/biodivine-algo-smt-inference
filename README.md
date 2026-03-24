@@ -124,3 +124,17 @@ In general, all comparison constraints can be also given as soft constraints.
 Note that for the whole states, the only supported comparisons are `equal` and `not-equal`, as there are multiple partial orders that we could consider to implement the remaining comparisons.
 
  > Soon, an option to express state successors as a single constraint should be added as well.
+
+
+### Inference solver with iteration over multiple solutions
+
+> Work in progress: This feature is currently being tested.
+
+You can use the `inference_problem_solver_iterative` binary to run the current version of the inference solver and iterate over multiple solutions. 
+Use the binary as: 
+```
+inference_problem_solver_iterative <INPUT_MODEL> --limit <N> --blocker <BLOCKING_STRATEGY>
+```
+ - `limit` specifies the maximum number of solutions to iterate over
+ - `blocker` specifies the blocking strategy. We offer two strategies for iterating solutions, either by blocking state assignments, or function interpretations. Use `state-valuations` or `state-valuations:VAR_NAME` to block valuations of SMT state variables (if `VAR_NAME` is specified, only block assignments corresponding to a selected BN variable). Use `function-points` or `function-points:VAR_NAME` to block the function interpretation (if `VAR_NAME` is specified, only block function corresponding to a selected BN variable). Default value is `state-valuations`.
+- Use `--help` flag to see more details on additional standard solver arguments.
