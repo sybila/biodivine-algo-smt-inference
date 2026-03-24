@@ -20,6 +20,7 @@ pub struct InferenceProblemEncoder<SOLVER> {
     /// Referencing the associated inference problem.
     pub problem: InferenceProblem<SOLVER>,
     /// An update function declaration of model variables.
+    /// TODO: change this for specified update functions
     update_functions: BTreeMap<VariableId, FuncDecl>,
     /// Assigns each declared state the literals necessary to construct the state.
     state_atoms: BTreeMap<String, BTreeMap<VariableId, TypedAst>>,
@@ -40,6 +41,7 @@ impl<SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<SOLVER>
         propagate_observations: bool,
     ) -> Result<Self, anyhow::Error> {
         let mut encoder = InferenceProblemEncoder {
+            // TODO: change this for specified update functions
             update_functions: problem
                 .variables()
                 .map(|var| (var, Self::mk_update_function(&problem, var)))
@@ -146,6 +148,8 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
     }
 
     /// Retrieve the declaration corresponding to the update function of the given variable.
+    ///
+    /// TODO: change this for specified update functions
     pub fn update_function(&self, variable: VariableId) -> &FuncDecl {
         self.update_functions
             .get(&variable)
@@ -170,6 +174,8 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
     ///
     /// If the number of arguments or argument types do not match what is expected for
     /// the update function, or if the given variable does not exist at all.
+    ///
+    /// TODO: change this for specified update functions
     pub fn mk_update_function_call(&self, variable: VariableId, args: &[&TypedAst]) -> TypedAst {
         // Check that the variable exists and has a function.
         let function = self.update_function(variable);

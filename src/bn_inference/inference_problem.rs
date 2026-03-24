@@ -8,7 +8,9 @@ use crate::smt_solver::{
     AbstractMonotoneBoundedIntOptimizeSolver, AbstractMonotoneBoundedIntSolver,
 };
 use anyhow::anyhow;
-use biodivine_lib_param_bn::{BooleanNetwork, ModelAnnotation, RegulatoryGraph, VariableId};
+use biodivine_lib_param_bn::{
+    BooleanNetwork, FnUpdate, ModelAnnotation, RegulatoryGraph, VariableId,
+};
 use std::collections::BTreeSet;
 use std::ops::{Index, IndexMut};
 use z3::{Sort, SortKind};
@@ -32,6 +34,10 @@ pub struct VariableData {
     pub domain: (u32, u32),
     /// Regulators of this variable.
     pub regulators: BTreeSet<VariableId>,
+    /// Optional concrete update function expression for this variable.
+    /// Currently, we only support either no expression (completely uninterpreted function) or a
+    /// fully specified expression (no parameters).
+    pub update_expr: Option<FnUpdate>,
     /// A hidden private field to make sure this struct can only be instantiated by this module.
     _hidden: (),
 }
@@ -43,6 +49,14 @@ impl VariableData {
 
     pub fn is_int(&self) -> bool {
         self.ast_type() == AstType::Int
+    }
+
+    pub fn has_update_expr(&self) -> bool {
+        self.update_expr.is_some()
+    }
+
+    pub fn update_expr(&self) -> &Option<FnUpdate> {
+        &self.update_expr
     }
 
     pub fn ast_type(&self) -> AstType {
@@ -157,6 +171,7 @@ impl<SOLVER: 'static> InferenceProblem<SOLVER> {
             name: name.to_string(),
             domain,
             regulators: BTreeSet::default(),
+            update_expr: None,
             _hidden: (),
         };
         self.declared_variables.push(data);
@@ -202,7 +217,8 @@ impl<SOLVER: 'static> InferenceProblem<SOLVER> {
 
 impl<SOLVER: AbstractMonotoneBoundedIntSolver + 'static> InferenceProblem<SOLVER> {
     /// Completely initialize the [`InferenceProblem`] from the given [`RegulatoryGraph`],
-    /// declaring all variables as Boolean and using their declared regulations.
+    /// declaring all variables as Boolean and using their declared regulations. All update
+    /// function expressions remain completely unspecified.
     pub fn from_influence_graph(
         rg: &RegulatoryGraph,
     ) -> Result<InferenceProblem<SOLVER>, anyhow::Error> {
@@ -237,6 +253,43 @@ impl<SOLVER: AbstractMonotoneBoundedIntSolver + 'static> InferenceProblem<SOLVER
         // Declare all essential inputs:
         for c in RegulatorIsEssential::read_from(rg) {
             self.assert_constraint(c)?;
+        }
+
+        Ok(())
+    }
+
+    /// Initialize (optional) update function expressions for Boolean variables based on the
+    /// provided [`BooleanNetwork`], assuming all variables are already declared.
+    ///
+    /// This assumes that [`Self::initialize_regulations`] (or [`Self::from_influence_graph`])
+    /// was already called on to populate the inference problem with variables and regulations.
+    ///
+    /// Expressions can only be specified for Boolean variables, and these can only reference the
+    /// variable's regulators. We currently do not support partially specified update functions (no
+    /// parameters are allowed yet).
+    pub fn initialize_update_expressions(
+        &mut self,
+        bn: &BooleanNetwork,
+    ) -> Result<(), anyhow::Error> {
+        // Declare all update expressions specified in the BN:
+        for variable in bn.variables() {
+            let update_expr = bn.get_update_function(variable);
+            if let Some(expression) = update_expr {
+                if !self[variable].domain.1 <= 1 {
+                    panic!("Specifying update functions is only available for Boolean variables.");
+                }
+                if !expression.collect_parameters().is_empty() {
+                    panic!("Partially specified update functions are not supported yet.");
+                }
+                for arg in expression.collect_arguments() {
+                    if !self[variable].regulators.contains(&arg) {
+                        panic!(
+                            "Variable {arg} does not regulate {variable} and cant appear in its update fn."
+                        );
+                    }
+                }
+                self[variable].update_expr = update_expr.clone();
+            }
         }
 
         Ok(())
