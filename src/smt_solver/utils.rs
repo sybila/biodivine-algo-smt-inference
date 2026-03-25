@@ -7,8 +7,11 @@ use std::collections::{BTreeMap, HashSet};
 use z3::ast::{Ast, Bool, Dynamic, Int};
 use z3::{DeclKind, FuncDecl, Model};
 
-/// Extract all uninterpreted function applications from the given expression. The expression is
-/// only allowed to use `Int` and `Bool` functions.
+/// Extract all uninterpreted function applications from the given expression. The expression
+/// is only allowed to use `Int` and `Bool` functions.
+///
+/// Note that this also returns all occuring constants (including state constants),
+/// not just update functions.
 ///
 /// TODO: For now, this is ignoring usages that appear inside quantifiers...
 pub fn extract_function_applications(fml: &Bool) -> LinkedHashSet<Dynamic> {
@@ -28,8 +31,8 @@ pub fn extract_function_applications(fml: &Bool) -> LinkedHashSet<Dynamic> {
             }
         }
 
-        // Check if the expression is a non-trivial uninterpreted function application, and if so,
-        // save it.
+        // Check if the expression is a uninterpreted function application, and if so,
+        // save it. Note that constants are also valid function applications (with 0 arguments).
         if expr.is_app() && expr.decl().kind() == DeclKind::UNINTERPRETED {
             results.insert(expr);
         }
@@ -39,6 +42,8 @@ pub fn extract_function_applications(fml: &Bool) -> LinkedHashSet<Dynamic> {
 }
 
 /// Extract all uninterpreted function usages (including zero-arity constants) of type `Int`.
+///
+/// Note that this also returns all state constants, not just update functions.
 ///
 /// TODO: For now, this is ignoring usages that appear inside quantifiers...
 pub fn extract_int_functions(fml: &Bool) -> LinkedHashSet<Int> {
