@@ -18,22 +18,23 @@ def convert_csv_to_annotations(csv_path, weight=None):
         var_cols = reader.fieldnames[1:]
         rows = list(reader)
 
-        # 1. Output State Declarations
+        # 1. state declarations and fixed points
         unique_states = []
         for row in rows:
             state = str(row[state_col]).strip()
             if state not in unique_states:
                 unique_states.append(state)
-                print(f"#!state:declare:{state}")
+                print(f"#! state : declare : {state}")
+                print(f"#! state : fixed_point : {state} :")
 
-        # 2. Output Variable Comparisons
+        # 2. state variable setting
         for row in rows:
             state = str(row[state_col]).strip()
             for var in var_cols:
                 value = str(row[var]).strip()
                 
                 # Base format
-                base_str = f"#! comparison : equal : {state}/{var}: {value} :"
+                base_str = f"#! comparison : equal : `{state}/{var}`: {value} :"
                 
                 # Append weight if provided, otherwise leave trailing colon
                 if weight is not None:
