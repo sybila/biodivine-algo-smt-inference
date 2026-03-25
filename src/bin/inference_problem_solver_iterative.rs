@@ -135,7 +135,7 @@ fn main() -> Result<(), anyhow::Error> {
     inference_problem.initialize_constraints_and_weights(&psbn, &annotations)?;
 
     // TODO: fully specified functions are ignored for now (all updates are considered uninterpreted)
-    //inference_problem.initialize_update_expressions(&psbn)?;
+    inference_problem.initialize_update_expressions(&psbn)?;
 
     info!("Inference problem initialized. Creating constraints.");
 

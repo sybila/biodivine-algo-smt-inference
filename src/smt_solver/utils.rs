@@ -1,3 +1,4 @@
+use crate::bn_inference::InferenceProblemEncoder;
 use crate::smt_solver::AbstractSolver;
 use crate::smt_solver::typed_ast::{AstType, TypedAst};
 use anyhow::anyhow;
@@ -72,18 +73,27 @@ pub fn extract_int_functions(fml: &Bool) -> LinkedHashSet<Int> {
 /// are only allowed to use `Int` and `Bool` functions. Only unique expressions are returned,
 /// and expressions of each function are sorted for determinism.
 ///
-/// This uses [extract_function_applications] internally to process each assertion.
-pub fn collect_asserted_fn_calls<SOLVER: AbstractSolver>(
+/// This uses [extract_function_applications] internally to process each assertion. However,
+/// filtering is applied to get rid of all constants that do not represent update functions.
+pub fn collect_asserted_fn_calls<SOLVER: AbstractSolver + 'static>(
     solver: &SOLVER,
+    encoder: &InferenceProblemEncoder<SOLVER>,
 ) -> BTreeMap<String, Vec<Dynamic>> {
+    // We only care about function calls corresponding to update functions.
+    // There can be also other constants, but we ignore them.
+    let valid_update_fn_names = encoder.valid_update_fn_names();
+
     // Collect the fn calls into `HashSet`s at first to only get unique ones
     let mut func_calls_hash: BTreeMap<String, HashSet<Dynamic>> = BTreeMap::new();
     for assertion in solver.get_assertions() {
         for func_call in extract_function_applications(&assertion) {
-            func_calls_hash
-                .entry(func_call.decl().name())
-                .or_default()
-                .insert(func_call);
+            let fn_name = func_call.decl().name();
+            if valid_update_fn_names.contains(&fn_name) {
+                func_calls_hash
+                    .entry(func_call.decl().name())
+                    .or_default()
+                    .insert(func_call);
+            }
         }
     }
 

@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use anyhow::anyhow;
+use log::info;
 use z3::ast::Dynamic;
 
 use crate::bn_inference::{InferenceProblem, InferenceProblemEncoder};
@@ -104,7 +105,7 @@ impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceSolverIterator<'a, S
         // unique function occurances in the original solver assertions.
         let unique_fn_calls: BTreeMap<String, Vec<Dynamic>> = match blocking_strategy {
             BlockingStrategy::StateValuations(..) => BTreeMap::new(),
-            BlockingStrategy::FunctionPoints(..) => collect_asserted_fn_calls(&solver),
+            BlockingStrategy::FunctionPoints(..) => collect_asserted_fn_calls(&solver, encoder),
         };
 
         InferenceSolverIterator {
@@ -221,6 +222,7 @@ impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceSolverIterator<'a, S
                                 .name()
                         });
 
+                    println!("{:?}", self.unique_fn_calls);
                     self.encoder.generate_function_points_blocker(
                         &model,
                         fn_name,
@@ -232,6 +234,10 @@ impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceSolverIterator<'a, S
             // Generate and assert a blocking clause
             match blocker {
                 Ok(blocker) => {
+                    info!(
+                        "Generating blocking formula using {:?} strategy",
+                        &self.blocking_strategy
+                    );
                     self.solver.assert(&blocker);
                 }
                 Err(e) => {

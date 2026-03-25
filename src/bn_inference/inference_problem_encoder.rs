@@ -8,7 +8,7 @@ use crate::smt_solver::{
 use anyhow::anyhow;
 use biodivine_lib_param_bn::{BooleanNetwork, FnUpdate, Regulation, RegulatoryGraph, VariableId};
 use log::info;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use z3::ast::{Bool, Dynamic, Int};
 use z3::{AstKind, FuncDecl, Model};
 
@@ -82,7 +82,7 @@ impl<SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<SOLVER>
                     if let Some(fn_update) = &problem[var].update_expr {
                         (var, UpdateFunction::FullySpecified(fn_update.clone()))
                     } else {
-                        let func_decl = Self::mk_update_function(&problem, var);
+                        let func_decl = Self::mk_update_function_decl(&problem, var);
                         (var, UpdateFunction::Uninterpreted(func_decl))
                     }
                 })
@@ -164,7 +164,10 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
     ///
     /// Note that the naming is deterministic, i.e., calling this method multiple times
     /// with the same `problem` and `variable` produces the same function declaration.
-    fn mk_update_function(problem: &InferenceProblem<SOLVER>, variable: VariableId) -> FuncDecl {
+    fn mk_update_function_decl(
+        problem: &InferenceProblem<SOLVER>,
+        variable: VariableId,
+    ) -> FuncDecl {
         let name = format!("update_{}", variable.to_index());
         let range = problem[variable].sort();
 
@@ -202,6 +205,19 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
             .unwrap_or_else(|| panic!("Variable `{variable:?}` not found."))
     }
 
+    /// Retrieve a set of names of all fn declaration that are valid uninterpreted update
+    /// functions.
+    ///
+    /// This is useful since all defined SMT constants are by design uninterpreted functions,
+    /// and we need to distinguish them from actual update functions sometimes.
+    pub fn valid_update_fn_names(&self) -> HashSet<String> {
+        self.update_functions
+            .iter()
+            .filter_map(|(_, func)| func.as_func_decl())
+            .map(|func| func.name())
+            .collect()
+    }
+
     /// Retrieve the atom encoding the value of a particular variable in the given `state`.
     pub fn state_atom(&self, state: &str, variable: VariableId) -> &TypedAst {
         let atoms = self
@@ -223,17 +239,8 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
     ///
     /// TODO: change this for specified update functions
     pub fn mk_update_function_call(&self, variable: VariableId, args: &[&TypedAst]) -> TypedAst {
-        // Check that the variable exists and has a function declaration.
-        // TODO: We still need to deal with the case of fully specified expressions (converting
-        //       the FnUpdate into z3 ast and substituting the regulators with `args`)
-        let function = self
-            .update_function(variable)
-            .as_func_decl()
-            .unwrap_or_else(|| {
-                todo!(
-                    "Propagation of arguments into fully specified expressions not yet implemented."
-                )
-            });
+        // Check that the variable exists.
+        let function = self.update_function(variable);
 
         // Check that the type is correct.
         let variable = &self.problem[variable];
@@ -254,8 +261,27 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
         }
 
         // Make the function call and wrap it into `TypedAst`.
-        let function_call = function.apply(&args.iter().dyn_vec());
-        TypedAst::cast_dynamic(variable.ast_type(), function_call)
+        // If the function is fully specified, replace the formal arguments with actual
+        // args and also wrap it into `TypedAst`.
+        match function {
+            UpdateFunction::Uninterpreted(func_decl) => {
+                let function_call = func_decl.apply(&args.iter().dyn_vec());
+                TypedAst::cast_dynamic(variable.ast_type(), function_call)
+            }
+            UpdateFunction::FullySpecified(fn_update) => {
+                let substitution_map = variable
+                    .regulators
+                    .clone()
+                    .into_iter()
+                    .zip(args.iter().map(|arg| {
+                        arg.as_bool().cloned().unwrap_or_else(|| {
+                            panic!("Only pure Boolean functions can be fully specified.")
+                        })
+                    }))
+                    .collect();
+                TypedAst::from_fn_update(fn_update, &substitution_map)
+            }
+        }
     }
 
     /// Extract the valuation of variables in the given state according to the provided Z3 model.
