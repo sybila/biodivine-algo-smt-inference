@@ -4,6 +4,8 @@ use crate::smt_solver::AbstractMonotoneSolver;
 use biodivine_lib_param_bn::{Monotonicity, RegulatoryGraph, VariableId};
 use log::info;
 
+/// TODO: There cant be monotonicity constraints on fully specified functions
+/// at this moment. Support for this will be added later.
 pub struct RegulatorIsMonotone {
     target: VariableId,
     regulator: VariableId,
@@ -60,7 +62,12 @@ impl<SOLVER: AbstractMonotoneSolver + 'static> InferenceConstraint<SOLVER> for R
             "Asserting: regulator `{:?}` is monotone (is_positive={}) in target `{:?}`.",
             self.regulator, self.is_positive, self.target
         );
-        let function = encoder.update_function(self.target);
+
+        // TODO: Monotonicity for fully specified functions needs to be checked directly via
+        //       a differnt mechanism within the encoder.
+        let function = encoder.update_function(self.target)
+            .as_func_decl()
+            .unwrap_or_else(|| panic!("Cant use `RegulatorIsMonotone::assert_self` to check monotonicity of fully specified functions."));
         let argument = encoder.problem[self.target]
             .regulator_index(self.regulator)
             .unwrap_or_else(|| unreachable!()); // Must fail during validation.

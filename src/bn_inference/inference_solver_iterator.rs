@@ -2,10 +2,9 @@ use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use anyhow::anyhow;
-use biodivine_lib_param_bn::BooleanNetwork;
 use z3::ast::Dynamic;
 
-use crate::bn_inference::InferenceProblemEncoder;
+use crate::bn_inference::{InferenceProblem, InferenceProblemEncoder};
 use crate::smt_solver::{AbstractMonotoneSolver, collect_asserted_fn_calls};
 
 #[derive(Debug, Clone)]
@@ -18,14 +17,29 @@ pub enum BlockingStrategy {
 }
 
 impl BlockingStrategy {
-    pub fn validate(&self, bn: &BooleanNetwork) -> Result<(), anyhow::Error> {
+    pub fn validate<SOLVER: AbstractMonotoneSolver + 'static>(
+        &self,
+        problem: &InferenceProblem<SOLVER>,
+    ) -> Result<(), anyhow::Error> {
         match &self {
-            BlockingStrategy::StateValuations(Some(var))
-            | BlockingStrategy::FunctionPoints(Some(var)) => {
-                if bn.as_graph().find_variable(var).is_none() {
+            BlockingStrategy::StateValuations(Some(var)) => {
+                if problem.find_variable(var).is_none() {
                     Err(anyhow!("Invalid BN variable {var} in blocking strategy."))
                 } else {
                     Ok(())
+                }
+            }
+            BlockingStrategy::FunctionPoints(Some(var)) => {
+                if let Some(var_id) = problem.find_variable(var) {
+                    if problem[var_id].has_update_expr() {
+                        Err(anyhow!(
+                            "Can not iterate over functions for variable {var}, its function is fully specified."
+                        ))
+                    } else {
+                        Ok(())
+                    }
+                } else {
+                    Err(anyhow!("Invalid BN variable {var} in blocking strategy."))
                 }
             }
             _ => Ok(()),
@@ -113,6 +127,8 @@ impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceSolverIterator<'a, S
     /// be used for custom on-the-fly logging or to stop computation when some external condition
     /// is met. We allow the callback to return error and finish the computation from the outside
     /// for convenience. It is recommended to use `max_solutions` for simple solution limit though.
+    ///
+    /// This expects that the blocking strategy was validated by [BlockingStrategy::validate]
     pub fn get_n_solutions<F>(
         &mut self,
         max_solutions: Option<usize>,
@@ -150,15 +166,23 @@ impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceSolverIterator<'a, S
             if print_functions {
                 println!("= Function interpretations =");
                 for var in self.encoder.problem.variables() {
-                    let function = self
-                        .encoder
-                        .decode_update_function(var, &self.solver, &model)
-                        .unwrap();
-                    println!(
-                        "> Function table {}",
-                        self.encoder.problem.get_variable(var).unwrap().name
-                    );
-                    println!("{}", function);
+                    if let Some(update_expr) = self.encoder.update_function(var).as_fn_update() {
+                        println!(
+                            "> Function expression {} (fully spec)",
+                            self.encoder.problem.get_variable(var).unwrap().name
+                        );
+                        println!("{}\n", update_expr);
+                    } else {
+                        let function = self
+                            .encoder
+                            .decode_update_function(var, &self.solver, &model)
+                            .unwrap();
+                        println!(
+                            "> Function table {} (inferred)",
+                            self.encoder.problem.get_variable(var).unwrap().name
+                        );
+                        println!("{}", function);
+                    }
                 }
             }
             if callback(&model).is_err() {
@@ -188,7 +212,14 @@ impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceSolverIterator<'a, S
                     let fn_name = bn_var_name
                         .as_ref()
                         .map(|v_name| self.encoder.problem.find_variable(v_name).unwrap())
-                        .map(|v_id| self.encoder.update_function(v_id).name());
+                        .map(|v_id| {
+                            // We can safely unwrap here, as this had to be checked by [BlockingStrategy::validate]
+                            self.encoder
+                                .update_function(v_id)
+                                .as_func_decl()
+                                .unwrap()
+                                .name()
+                        });
 
                     self.encoder.generate_function_points_blocker(
                         &model,

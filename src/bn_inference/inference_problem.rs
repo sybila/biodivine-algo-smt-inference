@@ -264,9 +264,9 @@ impl<SOLVER: AbstractMonotoneBoundedIntSolver + 'static> InferenceProblem<SOLVER
     /// This assumes that [`Self::initialize_regulations`] (or [`Self::from_influence_graph`])
     /// was already called on to populate the inference problem with variables and regulations.
     ///
-    /// Expressions can only be specified for Boolean variables, and these can only reference the
-    /// variable's regulators. We currently do not support partially specified update functions (no
-    /// parameters are allowed yet).
+    /// Expressions can only be provided for Boolean variables, and these can only reference the
+    /// variable's regulators. We currently do not support partially specified update functions,
+    /// fully uninterpreted or fully specified (no nested parameters are allowed yet).
     pub fn initialize_update_expressions(
         &mut self,
         bn: &BooleanNetwork,
@@ -275,6 +275,12 @@ impl<SOLVER: AbstractMonotoneBoundedIntSolver + 'static> InferenceProblem<SOLVER
         for variable in bn.variables() {
             let update_expr = bn.get_update_function(variable);
             if let Some(expression) = update_expr {
+                // Single explicit uninterpreted function as update fn is okay, this will be
+                // solved by the standard inference as if the function would be empty
+                if expression.as_param().is_some() {
+                    continue;
+                }
+
                 if !self[variable].domain.1 <= 1 {
                     panic!("Specifying update functions is only available for Boolean variables.");
                 }
@@ -288,7 +294,13 @@ impl<SOLVER: AbstractMonotoneBoundedIntSolver + 'static> InferenceProblem<SOLVER
                         );
                     }
                 }
-                self[variable].update_expr = update_expr.clone();
+
+                // This bypasses the `get_variable_mut` check that no constraints were added yet,
+                // since we need regulation constraints to already be placed at this point.
+                self.declared_variables
+                    .get_mut(variable.to_index())
+                    .unwrap()
+                    .update_expr = update_expr.clone();
             }
         }
 

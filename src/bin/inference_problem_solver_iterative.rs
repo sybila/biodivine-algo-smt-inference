@@ -95,9 +95,6 @@ fn main() -> Result<(), anyhow::Error> {
     let psbn = Rc::new(psbn);
     let annotations = ModelAnnotation::from_model_string(&model_string);
 
-    let blocking_strategy = args.blocker;
-    blocking_strategy.validate(&psbn)?;
-
     info!("Building solver using `{}` encoding..", args.solver);
 
     let mut inference_problem = InferenceProblem::<DynMonotoneBoundedIntOptimizeSolver>::new();
@@ -137,7 +134,13 @@ fn main() -> Result<(), anyhow::Error> {
     inference_problem.initialize_regulations(psbn.as_graph())?;
     inference_problem.initialize_constraints_and_weights(&psbn, &annotations)?;
 
+    // TODO: fully specified functions are ignored for now (all updates are considered uninterpreted)
+    //inference_problem.initialize_update_expressions(&psbn)?;
+
     info!("Inference problem initialized. Creating constraints.");
+
+    let blocking_strategy = args.blocker;
+    blocking_strategy.validate(&inference_problem)?; // Need constraints initialized for validation
 
     let encoder = InferenceProblemEncoder::new(
         inference_problem,
