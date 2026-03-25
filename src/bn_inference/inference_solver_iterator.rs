@@ -222,7 +222,6 @@ impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceSolverIterator<'a, S
                                 .name()
                         });
 
-                    println!("{:?}", self.unique_fn_calls);
                     self.encoder.generate_function_points_blocker(
                         &model,
                         fn_name,

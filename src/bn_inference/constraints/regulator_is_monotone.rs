@@ -58,16 +58,22 @@ impl<SOLVER: AbstractMonotoneSolver + 'static> InferenceConstraint<SOLVER> for R
         encoder: &InferenceProblemEncoder<SOLVER>,
         solver: &mut SOLVER,
     ) -> Result<(), anyhow::Error> {
+        // TODO: Monotonicity for fully specified functions needs to be checked directly via a
+        //       different mechanism within the encoder in future. We just ignore it here for now.
+        let update_fn = encoder.update_function(self.target);
+        if !update_fn.is_uninterpreted() {
+            info!(
+                "Ignoring monotonicity of `{:?}` -> `{:?}` because {:?} has fully specified function.",
+                self.regulator, self.target, self.target
+            );
+            return Ok(());
+        }
+
         info!(
             "Asserting: regulator `{:?}` is monotone (is_positive={}) in target `{:?}`.",
             self.regulator, self.is_positive, self.target
         );
-
-        // TODO: Monotonicity for fully specified functions needs to be checked directly via
-        //       a differnt mechanism within the encoder.
-        let function = encoder.update_function(self.target)
-            .as_func_decl()
-            .unwrap_or_else(|| panic!("Cant use `RegulatorIsMonotone::assert_self` to check monotonicity of fully specified functions."));
+        let function = update_fn.as_func_decl().unwrap(); // Can safely unwrap now.
         let argument = encoder.problem[self.target]
             .regulator_index(self.regulator)
             .unwrap_or_else(|| unreachable!()); // Must fail during validation.

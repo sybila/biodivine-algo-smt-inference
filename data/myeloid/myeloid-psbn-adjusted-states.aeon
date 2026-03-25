@@ -1,0 +1,105 @@
+#! state : declare : Erythrocyte
+#! state : fixed_point : Erythrocyte :
+#! state : declare : Megakaryocyte
+#! state : fixed_point : Megakaryocyte :
+#! state : declare : Monocyte
+#! state : fixed_point : Monocyte :
+#! state : declare : Granulocyte
+#! state : fixed_point : Granulocyte :
+#! comparison : equal : `Erythrocyte/GATA2`: 0 : weight: 0.5
+#! comparison : equal : `Erythrocyte/GATA1`: 1 : weight: 0.5
+#! comparison : equal : `Erythrocyte/FOG1`: 1 : weight: 0.5
+#! comparison : equal : `Erythrocyte/EKLF`: 1 : weight: 0.5
+#! comparison : equal : `Erythrocyte/Fli1`: 0 : weight: 0.5
+#! comparison : equal : `Erythrocyte/SCL`: 1 : weight: 0.5
+#! comparison : equal : `Erythrocyte/CEBPa`: 0 : weight: 0.5
+#! comparison : equal : `Erythrocyte/PU1`: 0 : weight: 0.5
+#! comparison : equal : `Erythrocyte/cjun`: 0 : weight: 0.5
+#! comparison : equal : `Erythrocyte/EgrNab`: 0 : weight: 0.5
+#! comparison : equal : `Erythrocyte/Gfi1`: 0 : weight: 0.5
+#! comparison : equal : `Megakaryocyte/GATA2`: 0 : weight: 0.5
+#! comparison : equal : `Megakaryocyte/GATA1`: 1 : weight: 0.5
+#! comparison : equal : `Megakaryocyte/FOG1`: 1 : weight: 0.5
+#! comparison : equal : `Megakaryocyte/EKLF`: 0 : weight: 0.5
+#! comparison : equal : `Megakaryocyte/Fli1`: 1 : weight: 0.5
+#! comparison : equal : `Megakaryocyte/SCL`: 1 : weight: 0.5
+#! comparison : equal : `Megakaryocyte/CEBPa`: 0 : weight: 0.5
+#! comparison : equal : `Megakaryocyte/PU1`: 0 : weight: 0.5
+#! comparison : equal : `Megakaryocyte/cjun`: 0 : weight: 0.5
+#! comparison : equal : `Megakaryocyte/EgrNab`: 0 : weight: 0.5
+#! comparison : equal : `Megakaryocyte/Gfi1`: 0 : weight: 0.5
+#! comparison : equal : `Monocyte/GATA2`: 0 : weight: 0.5
+#! comparison : equal : `Monocyte/GATA1`: 0 : weight: 0.5
+#! comparison : equal : `Monocyte/FOG1`: 0 : weight: 0.5
+#! comparison : equal : `Monocyte/EKLF`: 0 : weight: 0.5
+#! comparison : equal : `Monocyte/Fli1`: 0 : weight: 0.5
+#! comparison : equal : `Monocyte/SCL`: 0 : weight: 0.5
+#! comparison : equal : `Monocyte/CEBPa`: 1 : weight: 0.5
+#! comparison : equal : `Monocyte/PU1`: 1 : weight: 0.5
+#! comparison : equal : `Monocyte/cjun`: 1 : weight: 0.5
+#! comparison : equal : `Monocyte/EgrNab`: 1 : weight: 0.5
+#! comparison : equal : `Monocyte/Gfi1`: 0 : weight: 0.5
+#! comparison : equal : `Granulocyte/GATA2`: 0 : weight: 0.5
+#! comparison : equal : `Granulocyte/GATA1`: 0 : weight: 0.5
+#! comparison : equal : `Granulocyte/FOG1`: 0 : weight: 0.5
+#! comparison : equal : `Granulocyte/EKLF`: 0 : weight: 0.5
+#! comparison : equal : `Granulocyte/Fli1`: 0 : weight: 0.5
+#! comparison : equal : `Granulocyte/SCL`: 0 : weight: 0.5
+#! comparison : equal : `Granulocyte/CEBPa`: 1 : weight: 0.5
+#! comparison : equal : `Granulocyte/PU1`: 1 : weight: 0.5
+#! comparison : equal : `Granulocyte/cjun`: 0 : weight: 0.5
+#! comparison : equal : `Granulocyte/EgrNab`: 0 : weight: 0.5
+#! comparison : equal : `Granulocyte/Gfi1`: 1 : weight: 0.5
+
+GATA2 -| PU1
+PU1 -| GATA1
+EgrNab -| Gfi1
+CEBPa -> Gfi1
+Fli1 -> GATA1
+GATA1 -| GATA2
+CEBPa -> PU1
+GATA1 -> GATA1
+PU1 -> EgrNab
+Gfi1 -| EgrNab
+SCL -| CEBPa
+EKLF -| Fli1
+CEBPa -> CEBPa
+GATA1 -> Fli1
+FOG1 -| CEBPa
+GATA1 -> EKLF
+FOG1 -| GATA2
+PU1 -> PU1
+PU1 -| SCL
+PU1 -| GATA2
+Fli1 -| EKLF
+Gfi1 -| cjun
+GATA1 -> FOG1
+cjun -> EgrNab
+GATA1 -| PU1
+GATA2 -> GATA2
+GATA1 -> SCL
+GATA1 -| CEBPa
+GATA2 -> GATA1
+PU1 -> cjun
+$CEBPa: f1(CEBPa, GATA1, FOG1, SCL)
+$EKLF: f2(GATA1, Fli1)
+$EgrNab: f3(PU1, cjun, Gfi1)
+$FOG1: f4(GATA1)
+$Fli1: f5(GATA1, EKLF)
+$GATA1: f6(GATA1, GATA2, Fli1, PU1)
+$GATA2: f7(GATA2, GATA1, FOG1, PU1)
+$Gfi1: f8(CEBPa, EgrNab)
+$PU1: f9(CEBPa, PU1, GATA1, GATA2)
+$SCL: f10(GATA1, PU1)
+$cjun: f11(PU1, Gfi1)
+#position:EKLF:325.92612,-226.8565
+#position:cjun:-169.24475,-149.82033
+#position:SCL:72.994225,-148.84085
+#position:CEBPa:27.443956,-216.9239
+#position:GATA1:232.30206,-149.9392
+#position:GATA2:152.53964,-12.283747
+#position:Gfi1:-81.611046,-281.53668
+#position:PU1:31.361515,-79.4219
+#position:EgrNab:-81.09596,-40.79018
+#position:FOG1:150.46284,-259.55215
+#position:Fli1:331.15344,-67.76327

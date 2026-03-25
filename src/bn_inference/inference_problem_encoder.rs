@@ -28,8 +28,8 @@ impl UpdateFunction {
         UpdateFunction::FullySpecified(fn_update)
     }
 
-    pub fn is_uninterpreted(&self) {
-        matches!(self, UpdateFunction::Uninterpreted(..));
+    pub fn is_uninterpreted(&self) -> bool {
+        matches!(self, UpdateFunction::Uninterpreted(..))
     }
 
     pub fn as_func_decl(&self) -> Option<&FuncDecl> {
