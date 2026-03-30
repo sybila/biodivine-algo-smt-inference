@@ -15,6 +15,7 @@ use log::{error, info};
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::rc::Rc;
+use std::time::Instant;
 use z3::{Model, Params, SatResult, set_global_param};
 
 #[derive(Parser)]
@@ -74,6 +75,7 @@ struct Arguments {
 fn main() -> Result<(), anyhow::Error> {
     let args = Arguments::parse();
     let args = Rc::new(args);
+    let start = Instant::now();
 
     // Handle verbose logging - if specified, override env_logger settings.
     // Otherwise, adhere to settings read from `RUST_LOG`.
@@ -162,7 +164,8 @@ fn main() -> Result<(), anyhow::Error> {
         let psbn_copy = psbn.clone();
         let encoder_copy = encoder.clone();
         solver.register_model_handler(Box::new(move |result| {
-            println!("Solver made progress. New intermediate solution.");
+            let elapsed = start.elapsed();
+            info!("New solution found. Elapsed: {}ms.", elapsed.as_millis());
 
             report_solution(&args_copy, &psbn_copy, &encoder_copy, None, result)
                 .expect("Failed to report solution");
