@@ -24,28 +24,33 @@ use z3::Symbol;
 /// *Note that you can also create dedicated soft constraints directly by implementing
 /// [`InferenceConstraint`]. However, [`SoftConstraint`] makes it possible to interpret instances
 /// of [`SimpleInferenceConstraint`] as soft constraints directly without any code duplication.*
-pub struct SoftConstraint<SOLVER: AbstractOptimizeSolver, C: SimpleInferenceConstraint<SOLVER>> {
-    pub constraint: C,
+pub struct SoftConstraint<SOLVER: AbstractOptimizeSolver> {
+    pub constraint: Box<dyn SimpleInferenceConstraint<SOLVER>>,
     pub priority_class: u32,
     pub weight: BigRational,
     _phantom: PhantomData<SOLVER>,
 }
 
-impl<SOLVER: AbstractOptimizeSolver, C: SimpleInferenceConstraint<SOLVER>>
-    SoftConstraint<SOLVER, C>
-{
-    pub fn with_weight(constraint: C, weight: BigRational) -> Self {
+impl<SOLVER: AbstractOptimizeSolver> SoftConstraint<SOLVER> {
+    pub fn with_weight<C: SimpleInferenceConstraint<SOLVER>>(
+        constraint: C,
+        weight: BigRational,
+    ) -> Self {
         SoftConstraint {
-            constraint,
+            constraint: Box::new(constraint),
             priority_class: 0,
             weight,
             _phantom: Default::default(),
         }
     }
 
-    pub fn with_weight_and_class(constraint: C, weight: BigRational, priority_class: u32) -> Self {
+    pub fn with_weight_and_class<C: SimpleInferenceConstraint<SOLVER>>(
+        constraint: C,
+        weight: BigRational,
+        priority_class: u32,
+    ) -> Self {
         SoftConstraint {
-            constraint,
+            constraint: Box::new(constraint),
             priority_class,
             weight,
             _phantom: Default::default(),
@@ -53,17 +58,15 @@ impl<SOLVER: AbstractOptimizeSolver, C: SimpleInferenceConstraint<SOLVER>>
     }
 }
 
-impl<
-    SOLVER: AbstractOptimizeSolver + 'static,
-    INNER: SimpleInferenceConstraint<SOLVER> + InferenceConstraint<SOLVER>,
-> SoftConstraint<SOLVER, INNER>
-{
+impl<SOLVER: AbstractOptimizeSolver + 'static> SoftConstraint<SOLVER> {
     /// Wraps a given constraint into a soft constraint if applicable
     /// based on the provided model annotation.
     ///
     /// The soft constraint is created if the annotation contains either a valid `weight` or
     /// `priority-class` key. If neither is provided, it remains a hard constraint.
-    pub fn wrap_if_soft(
+    pub fn wrap_if_soft<
+        INNER: SimpleInferenceConstraint<SOLVER> + InferenceConstraint<SOLVER> + 'static,
+    >(
         inner: INNER,
         metadata: &ModelAnnotation,
     ) -> Result<Box<dyn InferenceConstraint<SOLVER>>, Error> {
@@ -88,8 +91,8 @@ impl<
     }
 }
 
-impl<SOLVER: AbstractOptimizeSolver + 'static, C: SimpleInferenceConstraint<SOLVER> + 'static>
-    InferenceConstraint<SOLVER> for SoftConstraint<SOLVER, C>
+impl<SOLVER: AbstractOptimizeSolver + 'static> InferenceConstraint<SOLVER>
+    for SoftConstraint<SOLVER>
 {
     fn validate(&self, problem: &InferenceProblem<SOLVER>) -> Result<(), Error> {
         self.constraint.validate(problem)
