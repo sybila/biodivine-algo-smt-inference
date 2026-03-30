@@ -1,4 +1,4 @@
-use biodivine_algo_smt_inference::bn_inference::constraints::{SoftConstraint, ValueComparison};
+use biodivine_algo_smt_inference::bn_inference::constraints::SoftConstraint;
 use biodivine_algo_smt_inference::bn_inference::{InferenceProblem, InferenceProblemEncoder};
 use biodivine_algo_smt_inference::smt_solver::{
     AbstractOptimizeSolver, AbstractSolver, BoundedIntSolver, DynMonotoneBoundedIntOptimizeSolver,
@@ -7,9 +7,9 @@ use biodivine_algo_smt_inference::smt_solver::{
 use biodivine_lib_param_bn::{BooleanNetwork, ModelAnnotation};
 use clap::Parser;
 use clap::builder::PossibleValuesParser;
-use log::{error, info};
-use std::collections::BTreeMap;
-use std::fmt::Debug;
+use log::{debug, error, info};
+use num_rational::BigRational;
+use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 use std::time::Instant;
 use z3::{Model, SatResult, set_global_param};
@@ -53,17 +53,18 @@ struct Arguments {
     #[clap(long, default_value = "false")]
     print_state_valuations: bool,
 
-    /// If set to `true`, the solver will also print every soft constraint and its validity.
+    /// If set to `true`, the solver will also print a summary of violated soft constraints.
+    /// If `verbose` is set to `debug`, it also prints every violated constraint.
     #[clap(long, default_value = "false")]
     print_soft_constraints: bool,
 
     /// If set to `true`, the solver will also print every intermediate solution, using the
-    /// same print settings as for the final solution (including saving the intermediate
-    /// model to a file, if specified).
+    /// same print settings as for the final solution (except for printing/saving update rules).
     #[clap(long, default_value = "false")]
     print_intermediate_results: bool,
 
     /// Log level verbosity. Flag `-v` sets log level to 'info'. Manually, you can specify: trace, debug, info, warn, or error.
+    /// Settings 'info', 'debug' and 'trace' also enable verbose logging within Z3.
     #[arg(long, short, num_args = 0..=1, default_missing_value = "info", require_equals = true)]
     verbose: Option<String>,
 }
@@ -94,7 +95,7 @@ fn main() -> Result<(), anyhow::Error> {
     }
 
     // If the log level is at least `Debug`, enable verbose logging in Z3.
-    if log::max_level() >= log::LevelFilter::Debug {
+    if log::max_level() >= log::LevelFilter::Info {
         set_global_param("verbose", "1");
     }
 
@@ -192,11 +193,11 @@ fn main() -> Result<(), anyhow::Error> {
         };
         priority_classes.insert(c.priority_class);
     }
-    for cls in priority_classes {
-        info!(
+    for cls in 0..priority_classes.len() {
+        println!(
             "Priority class `{cls}` penalty bounds: [{:?}, {:?}]",
-            solver.get_lower(0),
-            solver.get_upper(0)
+            solver.get_lower(cls as u32),
+            solver.get_upper(cls as u32),
         );
     }
 
@@ -254,39 +255,55 @@ fn report_solution(
 
     if args.print_soft_constraints {
         println!("=== Constraint satisfaction ===");
-        print_violated_clauses::<StateComparison>(encoder, model)?;
-        print_violated_clauses::<StateIsFixedPoint>(encoder, model)?;
-        print_violated_clauses::<ValueComparison>(encoder, model)?;
+        print_violated_clauses(encoder, model)?;
     }
 
     Ok(())
 }
 
-fn print_violated_clauses<
-    S: SimpleInferenceConstraint<DynMonotoneBoundedIntOptimizeSolver> + Debug,
->(
-    encoder: &InferenceProblemEncoder<DynMonotoneBoundedIntOptimizeSolver>,
+/// Print summary statistics about violated soft constraints (and the actual constraints).
+fn print_violated_clauses<SOLVER: AbstractOptimizeSolver + 'static>(
+    encoder: &InferenceProblemEncoder<SOLVER>,
     model: &Model,
 ) -> Result<(), anyhow::Error> {
+    #[derive(Default)]
+    struct ViolationStats {
+        total: BigRational,
+        violated: BigRational,
+        violated_constraints: u32,
+        total_constraints: u32,
+    }
+
+    let mut per_class_data: BTreeMap<u32, ViolationStats> = BTreeMap::new();
+
     for constraint in encoder.problem.constraints() {
-        let Some(constraint) =
-            constraint.downcast_ref::<SoftConstraint<DynMonotoneBoundedIntOptimizeSolver, S>>()
-        else {
+        let Some(constraint) = constraint.downcast_ref::<SoftConstraint<SOLVER>>() else {
             continue;
         };
 
+        let data = per_class_data.entry(constraint.priority_class).or_default();
+        data.total += &constraint.weight;
+        data.total_constraints += 1;
+
         let formula = constraint.constraint.mk_assertion(encoder)?;
+
         let is_satisfied = model
             .eval(&formula, true)
             .and_then(|it| it.as_bool())
             .expect("Constraint cannot be evaluated.");
 
         if !is_satisfied {
-            println!(
-                "Violated `{:?}` with weight=`{}` and class=`{:?}`",
-                constraint.constraint, constraint.weight, constraint.priority_class
-            );
+            data.violated_constraints += 1;
+            data.violated += &constraint.weight;
+            debug!("Violated: `{constraint:?}`");
         }
+    }
+
+    for (cls, data) in per_class_data.iter() {
+        println!(
+            "Priority class `{cls}` model penalty: `{}` out of `{}` across `{}` out of `{}` constraints.",
+            data.violated, data.total, data.violated_constraints, data.total_constraints,
+        );
     }
 
     Ok(())

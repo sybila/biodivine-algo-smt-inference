@@ -10,9 +10,8 @@ use biodivine_algo_smt_inference::bn_inference::{
 use biodivine_algo_smt_inference::smt_solver::AbstractSolver;
 use biodivine_algo_smt_inference::smt_solver::typed_ast::TypedAst;
 use biodivine_lib_param_bn::{BooleanNetwork, ModelAnnotation, VariableId};
-use log::trace;
 use macros::InferenceConstraint;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use z3::ast::{Ast, Bool, Int};
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -201,11 +200,21 @@ impl CmpOp {
     }
 }
 
-#[derive(InferenceConstraint, Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(InferenceConstraint, PartialEq, Eq, Clone, Hash)]
 pub struct ValueComparison {
     pub left: ComparedValue,
     pub right: ComparedValue,
     pub op: CmpOp,
+}
+
+impl Debug for ValueComparison {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "ValueComparison({}, {}, {})",
+            self.left, self.op, self.right
+        )
+    }
 }
 
 impl ValueComparison {
@@ -299,11 +308,6 @@ impl<SOLVER: AbstractSolver + 'static> SimpleInferenceConstraint<SOLVER> for Val
         &self,
         encoder: &InferenceProblemEncoder<SOLVER>,
     ) -> Result<Bool, anyhow::Error> {
-        trace!(
-            "Making value comparison assertion `{} {} {}`.",
-            self.left, self.op, self.right
-        );
-
         let left_type = self.left.get_ast_type(&encoder.problem);
         let right_type = self.right.get_ast_type(&encoder.problem);
 

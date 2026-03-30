@@ -3,7 +3,6 @@ use crate::bn_inference::{InferenceProblem, InferenceProblemEncoder, SimpleInfer
 use crate::smt_solver::AbstractSolver;
 use anyhow::anyhow;
 use biodivine_lib_param_bn::ModelAnnotation;
-use log::trace;
 use macros::InferenceConstraint;
 use z3::ast::Bool;
 
@@ -87,18 +86,6 @@ impl<SOLVER: AbstractSolver + 'static> SimpleInferenceConstraint<SOLVER> for Sta
         &self,
         encoder: &InferenceProblemEncoder<SOLVER>,
     ) -> Result<Bool, anyhow::Error> {
-        if self.is_equal {
-            trace!(
-                "Making state equality assertion `{} == {}`.",
-                self.left, self.right
-            );
-        } else {
-            trace!(
-                "Making state inequality assertion `{} != {}`.",
-                self.left, self.right
-            );
-        }
-
         let equalities = encoder
             .problem
             .variables()

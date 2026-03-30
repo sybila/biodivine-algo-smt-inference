@@ -51,7 +51,7 @@ struct Arguments {
     print_state_valuations: bool,
 
     /// Log level verbosity. Flag `-v` sets log level to 'info'. Manually, you can specify: 'trace', 'debug', 'info', 'warn', or 'error'.
-    /// Settings 'debug' and 'trace' also enable verbose logging within Z3.
+    /// Settings 'info', 'debug' and 'trace' also enable verbose logging within Z3.
     #[arg(long, short, num_args = 0..=1, default_missing_value = "info", require_equals = true)]
     verbose: Option<String>,
 }
@@ -80,7 +80,7 @@ fn main() -> Result<(), anyhow::Error> {
     }
 
     // If the log level is at least `Debug`, enable verbose logging in Z3.
-    if log::max_level() >= log::LevelFilter::Debug {
+    if log::max_level() >= log::LevelFilter::Info {
         set_global_param("verbose", "1");
     }
 
