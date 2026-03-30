@@ -95,14 +95,6 @@ impl ComparedValue {
                 }
             }
             ComparedValue::VariableInState(state, variable) => {
-                if my_type != other_type {
-                    return Err(anyhow!(
-                        "Invalid comparison: `{}` has type `{}`, but need to be `{}`.",
-                        self,
-                        my_type,
-                        other_type
-                    ));
-                }
                 Ok(encoder.state_atom(state, *variable).clone())
             }
             ComparedValue::UpdateFunctionOutputInState(state, variable) => {
