@@ -4,6 +4,7 @@ use crate::smt_solver::AbstractMonotoneSolver;
 use biodivine_lib_param_bn::{Monotonicity, RegulatoryGraph, VariableId};
 use log::info;
 
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct RegulatorIsMonotone {
     target: VariableId,
     regulator: VariableId,

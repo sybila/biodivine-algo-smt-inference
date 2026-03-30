@@ -5,6 +5,7 @@ use crate::smt_solver::typed_ast::AstType;
 use biodivine_lib_param_bn::{RegulatoryGraph, VariableId};
 use log::info;
 
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct RegulatorIsEssential {
     target: VariableId,
     regulator: VariableId,

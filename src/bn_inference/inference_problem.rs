@@ -1,6 +1,6 @@
 use crate::bn_inference::constraints::{
-    ConstraintStrings, RegulatorIsEssential, RegulatorIsMonotone, SoftConstraint, StateComparison,
-    StateIsFixedPoint, ValueComparison,
+    ConstraintStrings, RawConstraint, RegulatorIsEssential, RegulatorIsMonotone, SoftConstraint,
+    StateComparison, StateIsFixedPoint, ValueComparison,
 };
 use crate::bn_inference::{DynInferenceConstraint, InferenceConstraint};
 use crate::smt_solver::typed_ast::{AstType, TypedAst};
@@ -9,8 +9,11 @@ use crate::smt_solver::{
 };
 use anyhow::anyhow;
 use biodivine_lib_param_bn::{BooleanNetwork, ModelAnnotation, RegulatoryGraph, VariableId};
+use num_rational::BigRational;
+use num_traits::Zero;
 use std::collections::BTreeSet;
 use std::ops::{Index, IndexMut};
+use z3::ast::Bool;
 use z3::{Sort, SortKind};
 
 /// Stores input data for a model inference problem without interacting with a solver.
@@ -316,6 +319,32 @@ impl<SOLVER: AbstractMonotoneBoundedIntOptimizeSolver + 'static> InferenceProble
 
         for (c, meta) in ValueComparison::read_from::<SOLVER>(psbn, annotation)? {
             self.assert_dyn_constraint(SoftConstraint::wrap_if_soft(c, meta)?)?;
+        }
+
+        // TODO:
+        //  A hack that enforces proper ordering of soft constraints.
+        //  Later implementations should probably just introduce priority class
+        //  as a property on all constraints and use it to introduce them in sorted order.
+        //  This way, if someone wants to later do a "custom soft constraint", it may clash
+        //  with this countermeasure. Also, this is something that should really be done by the
+        //  encoder, assuming we ever get to some additional refactoring in there.
+
+        let mut existing_priority_classes = BTreeSet::new();
+        for c in &self.inference_constraints {
+            let Some(c) = c.downcast_ref::<SoftConstraint<SOLVER>>() else {
+                continue;
+            };
+            existing_priority_classes.insert(c.priority_class);
+        }
+
+        for priority_class in existing_priority_classes.iter().rev() {
+            let do_nothing = SoftConstraint::with_weight_and_class(
+                RawConstraint::from(Bool::from_bool(true)),
+                BigRational::zero(),
+                *priority_class,
+            );
+
+            self.inference_constraints.insert(0, Box::new(do_nothing));
         }
 
         Ok(())
