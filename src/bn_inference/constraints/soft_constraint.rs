@@ -25,7 +25,7 @@ use z3::Symbol;
 /// of [`SimpleInferenceConstraint`] as soft constraints directly without any code duplication.*
 pub struct SoftConstraint<SOLVER: AbstractOptimizeSolver, C: SimpleInferenceConstraint<SOLVER>> {
     pub constraint: C,
-    pub priority_class: Symbol,
+    pub priority_class: u32,
     pub weight: BigRational,
     _phantom: PhantomData<SOLVER>,
 }
@@ -36,7 +36,7 @@ impl<SOLVER: AbstractOptimizeSolver, C: SimpleInferenceConstraint<SOLVER>>
     pub fn with_weight(constraint: C, weight: BigRational) -> Self {
         SoftConstraint {
             constraint,
-            priority_class: Symbol::Int(0u32),
+            priority_class: 0,
             weight,
             _phantom: Default::default(),
         }
@@ -45,7 +45,7 @@ impl<SOLVER: AbstractOptimizeSolver, C: SimpleInferenceConstraint<SOLVER>>
     pub fn with_weight_and_class(constraint: C, weight: BigRational, priority_class: u32) -> Self {
         SoftConstraint {
             constraint,
-            priority_class: Symbol::Int(priority_class),
+            priority_class,
             weight,
             _phantom: Default::default(),
         }
@@ -107,7 +107,7 @@ impl<SOLVER: AbstractOptimizeSolver + 'static, C: SimpleInferenceConstraint<SOLV
         solver.assert_soft_with_class(
             &assertion,
             self.weight.clone(),
-            Some(self.priority_class.clone()),
+            Some(Symbol::Int(self.priority_class)),
         );
         Ok(())
     }
