@@ -9,7 +9,7 @@ use clap::Parser;
 use clap::builder::PossibleValuesParser;
 use log::{error, info};
 use std::collections::BTreeMap;
-use z3::SatResult;
+use z3::{SatResult, set_global_param};
 
 #[derive(Parser)]
 #[clap(about = "SMT benchmarking prototype for BN inference (single solution).")]
@@ -50,7 +50,8 @@ struct Arguments {
     #[clap(long, default_value = "false")]
     print_state_valuations: bool,
 
-    /// Log level verbosity. Flag `-v` sets log level to 'info'. Manually, you can specify: trace, debug, info, warn, or error.
+    /// Log level verbosity. Flag `-v` sets log level to 'info'. Manually, you can specify: 'trace', 'debug', 'info', 'warn', or 'error'.
+    /// Settings 'debug' and 'trace' also enable verbose logging within Z3.
     #[arg(long, short, num_args = 0..=1, default_missing_value = "info", require_equals = true)]
     verbose: Option<String>,
 }
@@ -76,6 +77,11 @@ fn main() -> Result<(), anyhow::Error> {
             .init();
     } else {
         env_logger::init();
+    }
+
+    // If the log level is at least `Debug`, enable verbose logging in Z3.
+    if log::max_level() >= log::LevelFilter::Debug {
+        set_global_param("verbose", "1");
     }
 
     let model_string = std::fs::read_to_string(&args.model_path)?;

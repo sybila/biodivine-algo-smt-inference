@@ -15,7 +15,7 @@ use log::{error, info};
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::rc::Rc;
-use z3::{Model, SatResult};
+use z3::{Model, Params, SatResult, set_global_param};
 
 #[derive(Parser)]
 #[clap(about = "SMT benchmarking prototype for BN inference (single solution).")]
@@ -93,6 +93,11 @@ fn main() -> Result<(), anyhow::Error> {
             .init();
     } else {
         env_logger::init();
+    }
+
+    // If the log level is at least `Debug`, enable verbose logging in Z3.
+    if log::max_level() >= log::LevelFilter::Debug {
+        set_global_param("verbose", "1");
     }
 
     let model_string = std::fs::read_to_string(&args.model_path)?;
