@@ -9,6 +9,7 @@ use biodivine_lib_param_bn::ModelAnnotation;
 use log::info;
 use num_rational::BigRational;
 use num_traits::One;
+use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
 use z3::Symbol;
 
@@ -110,5 +111,15 @@ impl<SOLVER: AbstractOptimizeSolver + 'static, C: SimpleInferenceConstraint<SOLV
             Some(Symbol::Int(self.priority_class)),
         );
         Ok(())
+    }
+}
+
+impl<SOLVER: AbstractOptimizeSolver> Debug for SoftConstraint<SOLVER> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "SoftConstraint {{ constraint: {:?}, weight: {}, priority_class: {} }}",
+            self.constraint, self.weight, self.priority_class
+        )
     }
 }
