@@ -211,9 +211,9 @@ impl CmpOp {
 
 #[derive(InferenceConstraint, Debug, PartialEq, Eq, Clone, Hash)]
 pub struct ValueComparison {
-    left: ComparedValue,
-    right: ComparedValue,
-    op: CmpOp,
+    pub left: ComparedValue,
+    pub right: ComparedValue,
+    pub op: CmpOp,
 }
 
 impl ValueComparison {
