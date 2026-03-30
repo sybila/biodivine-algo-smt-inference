@@ -13,7 +13,7 @@ use biodivine_lib_param_bn::{BooleanNetwork, ModelAnnotation, VariableId};
 use log::info;
 use macros::InferenceConstraint;
 use std::fmt::{Display, Formatter};
-use z3::ast::{Bool, Int};
+use z3::ast::{Ast, Bool, Int};
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum ComparedValue {
@@ -318,13 +318,14 @@ impl<SOLVER: AbstractSolver + 'static> SimpleInferenceConstraint<SOLVER> for Val
         let left_ast = self.left.as_ast(encoder, left_type, right_type)?;
         let right_ast = self.right.as_ast(encoder, right_type, left_type)?;
 
-        match self.op {
+        Ok(match self.op {
             CmpOp::Less => left_ast.lt(&right_ast),
             CmpOp::LessEqual => left_ast.le(&right_ast),
             CmpOp::Equal => left_ast.eq(&right_ast),
             CmpOp::NotEqual => Ok(left_ast.eq(&right_ast)?.not()),
             CmpOp::GreaterEqual => right_ast.le(&left_ast),
             CmpOp::Greater => right_ast.lt(&left_ast),
-        }
+        }?
+        .simplify())
     }
 }
