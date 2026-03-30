@@ -1,9 +1,5 @@
-use biodivine_algo_smt_inference::bn_inference::constraints::{
-    SoftConstraint, StateComparison, StateIsFixedPoint, ValueComparison,
-};
-use biodivine_algo_smt_inference::bn_inference::{
-    InferenceProblem, InferenceProblemEncoder, SimpleInferenceConstraint,
-};
+use biodivine_algo_smt_inference::bn_inference::constraints::{SoftConstraint, ValueComparison};
+use biodivine_algo_smt_inference::bn_inference::{InferenceProblem, InferenceProblemEncoder};
 use biodivine_algo_smt_inference::smt_solver::{
     AbstractOptimizeSolver, AbstractSolver, BoundedIntSolver, DynMonotoneBoundedIntOptimizeSolver,
     InstantiatedMonotoneSolver, QuantifiedMonotoneSolver,
@@ -16,7 +12,7 @@ use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::rc::Rc;
 use std::time::Instant;
-use z3::{Model, Params, SatResult, set_global_param};
+use z3::{Model, SatResult, set_global_param};
 
 #[derive(Parser)]
 #[clap(about = "SMT benchmarking prototype for BN inference (single solution).")]
@@ -185,6 +181,23 @@ fn main() -> Result<(), anyhow::Error> {
             Some(&solver),
             &model,
         )?;
+    }
+
+    // TODO: This code should be simplified once we have a nicer way of handling priority classes:
+    let mut priority_classes = BTreeSet::new();
+    for c in encoder.problem.constraints() {
+        let Some(c) = c.downcast_ref::<SoftConstraint<DynMonotoneBoundedIntOptimizeSolver>>()
+        else {
+            continue;
+        };
+        priority_classes.insert(c.priority_class);
+    }
+    for cls in priority_classes {
+        info!(
+            "Priority class `{cls}` penalty bounds: [{:?}, {:?}]",
+            solver.get_lower(0),
+            solver.get_upper(0)
+        );
     }
 
     // Print 1/0 as the last piece of output:
