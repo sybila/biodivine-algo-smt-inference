@@ -10,7 +10,7 @@ use biodivine_algo_smt_inference::bn_inference::{
 use biodivine_algo_smt_inference::smt_solver::AbstractSolver;
 use biodivine_algo_smt_inference::smt_solver::typed_ast::TypedAst;
 use biodivine_lib_param_bn::{BooleanNetwork, ModelAnnotation, VariableId};
-use log::info;
+use log::trace;
 use macros::InferenceConstraint;
 use std::fmt::{Display, Formatter};
 use z3::ast::{Ast, Bool, Int};
@@ -299,7 +299,7 @@ impl<SOLVER: AbstractSolver + 'static> SimpleInferenceConstraint<SOLVER> for Val
         &self,
         encoder: &InferenceProblemEncoder<SOLVER>,
     ) -> Result<Bool, anyhow::Error> {
-        info!(
+        trace!(
             "Making value comparison assertion `{} {} {}`.",
             self.left, self.op, self.right
         );

@@ -26,6 +26,7 @@ pub fn derive_wrapper(input: TokenStream) -> TokenStream {
                 encoder: &::biodivine_algo_smt_inference::bn_inference::InferenceProblemEncoder<SOLVER>,
                 solver: &mut SOLVER,
             ) -> Result<(), anyhow::Error> {
+                log::info!("Asserting: `{self:?}`.");
                 let assertion = ::biodivine_algo_smt_inference::bn_inference::SimpleInferenceConstraint::mk_assertion(self, encoder)?;
                 solver.assert(&assertion);
                 Ok(())

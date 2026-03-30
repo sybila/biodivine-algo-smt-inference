@@ -204,9 +204,7 @@ fn main() -> Result<(), anyhow::Error> {
     match result {
         SatResult::Unsat => println!("0"),
         SatResult::Unknown => println!("?"),
-        SatResult::Sat => {
-            println!("1 (penalty: {:?})", solver.get_lower(0).unwrap());
-        }
+        SatResult::Sat => println!("1"),
     }
 
     Ok(())
@@ -250,7 +248,7 @@ fn report_solution(
                 .into_iter()
                 .map(|(a, b)| (psbn.get_variable_name(a), b))
                 .collect::<BTreeMap<_, _>>();
-            println!("State `{state}`: {:?}", named);
+            println!("`{state}`: {:?}", named);
         }
     }
 

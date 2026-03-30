@@ -105,8 +105,8 @@ impl<SOLVER: AbstractOptimizeSolver + 'static> InferenceConstraint<SOLVER>
     ) -> Result<(), Error> {
         let assertion = self.constraint.mk_assertion(encoder)?;
         info!(
-            "Asserting soft constraint with `weight={}` and `priority_class={:?}`",
-            self.weight, self.priority_class
+            "Asserting soft constraint `{:?}` with `weight={}` and `priority_class={:?}`",
+            self.constraint, self.weight, self.priority_class
         );
         solver.assert_soft_with_class(
             &assertion,
