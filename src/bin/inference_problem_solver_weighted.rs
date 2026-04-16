@@ -63,6 +63,11 @@ struct Arguments {
     #[clap(long, default_value = "false")]
     print_intermediate_results: bool,
 
+    /// If set to `true`, turns every variable with more than three outgoing regulations into
+    /// a multivalued variable with domain size proportional to regulation count.
+    #[clap(long, default_value = "false")]
+    auto_expand_domains: bool,
+
     /// Log level verbosity. Flag `-v` sets log level to 'info'. Manually, you can specify: trace, debug, info, warn, or error.
     /// Settings 'info', 'debug' and 'trace' also enable verbose logging within Z3.
     #[arg(long, short, num_args = 0..=1, default_missing_value = "info", require_equals = true)]
@@ -137,6 +142,17 @@ fn main() -> Result<(), anyhow::Error> {
             .get_value(&["variable", name, "max_value"])
             .map(|it| it.parse::<u32>().unwrap())
             .unwrap_or(1);
+        let targets = psbn.as_graph().targets(var).len();
+        let max_value = if args.auto_expand_domains && targets >= 3 {
+            info!(
+                "Setting max. value of {name} with {targets} targets to {}.",
+                targets - 1
+            );
+            targets as u32
+        } else {
+            max_value
+        };
+
         let var_p = inference_problem.declare_variable(name.as_str(), (0, max_value));
         assert_eq!(var_p, var);
     }
