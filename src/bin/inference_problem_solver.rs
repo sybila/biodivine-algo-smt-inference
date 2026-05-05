@@ -11,7 +11,7 @@ use clap::Parser;
 use clap::builder::PossibleValuesParser;
 use log::{error, info};
 use std::collections::BTreeMap;
-use z3::SatResult;
+use z3::{Params, SatResult};
 
 #[derive(Parser)]
 #[clap(about = "SMT benchmarking prototype for BN inference (single solution).")]
@@ -51,6 +51,11 @@ struct Arguments {
     /// Log level verbosity. Flag `-v` sets log level to 'info'. Manually, you can specify: trace, debug, info, warn, or error.
     #[arg(long, short, num_args = 0..=1, default_missing_value = "info", require_equals = true)]
     verbose: Option<String>,
+
+    /// Z3 solver parameters to overrride, as key=value pairs. Can be specified multiple times.
+    /// Examples: --z3-param smt.mbqi=true --z3-param smt.ematching=false
+    #[clap(long, value_name = "KEY=VALUE")]
+    z3_param: Vec<String>,
 }
 
 fn main() -> Result<(), anyhow::Error> {
@@ -97,7 +102,35 @@ fn main() -> Result<(), anyhow::Error> {
 
     let mut inference_problem = InferenceProblem::<DynMonotoneBoundedIntSolver>::new();
 
-    let base_solver = BoundedIntSolver::new_strict(z3::Solver::new());
+    // Apply user-provided Z3 parameters
+    let mut params = Params::new();
+    for param_str in &args.z3_param {
+        if let Some((key, value)) = param_str.split_once('=') {
+            let key = key.trim();
+            let value = value.trim();
+            info!(" setting param {} = {}", key, value);
+
+            if let Ok(bool_val) = value.parse::<bool>() {
+                params.set_bool(key, bool_val);
+            } else if let Ok(u32_val) = value.parse::<u32>() {
+                params.set_u32(key, u32_val);
+            } else if let Ok(f64_val) = value.parse::<f64>() {
+                params.set_f64(key, f64_val);
+            } else {
+                panic!("Warning: Invalid Z3 parameter type for '{key}'. Expected bool/u32/f64");
+            }
+        } else {
+            panic!(
+                "Warning: Invalid Z3 parameter format: '{}'. Expected KEY=VALUE",
+                param_str
+            );
+        }
+    }
+
+    let inner = z3::Solver::new();
+    inner.set_params(&params);
+
+    let base_solver = BoundedIntSolver::new_strict(inner);
     let mut solver: DynMonotoneBoundedIntSolver = match args.solver.as_str() {
         "quantified-individual" => Box::new(QuantifiedMonotoneSolver::new(
             base_solver,
