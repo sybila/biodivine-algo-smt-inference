@@ -63,19 +63,19 @@ fn main() -> Result<(), anyhow::Error> {
 
     // Handle verbose logging - if specified, override env_logger settings.
     // Otherwise, adhere to settings read from `RUST_LOG`.
-    if let Some(ref log_level) = args.verbose {
+    if let Some(ref log_level_str) = args.verbose {
+        let filter = match log_level_str.as_str() {
+            "trace" => log::LevelFilter::Trace,
+            "debug" => log::LevelFilter::Debug,
+            "info" => log::LevelFilter::Info,
+            "warn" => log::LevelFilter::Warn,
+            "error" => log::LevelFilter::Error,
+            _ => log::LevelFilter::Info,
+        };
+
         env_logger::Builder::from_default_env()
-            .filter_module(
-                "biodivine_algo_smt_inference",
-                match log_level.as_str() {
-                    "trace" => log::LevelFilter::Trace,
-                    "debug" => log::LevelFilter::Debug,
-                    "info" => log::LevelFilter::Info,
-                    "warn" => log::LevelFilter::Warn,
-                    "error" => log::LevelFilter::Error,
-                    _ => log::LevelFilter::Info,
-                },
-            )
+            .filter_module("biodivine_algo_smt_inference", filter)
+            .filter_module("inference_problem_solver", filter)
             .init();
     } else {
         env_logger::init();
