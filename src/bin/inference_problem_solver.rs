@@ -11,7 +11,7 @@ use clap::Parser;
 use clap::builder::PossibleValuesParser;
 use log::{error, info};
 use std::collections::BTreeMap;
-use z3::{Params, SatResult};
+use z3::{Params, SatResult, Tactic};
 
 #[derive(Parser)]
 #[clap(about = "SMT benchmarking prototype for BN inference (single solution).")]
@@ -53,9 +53,15 @@ struct Arguments {
     verbose: Option<String>,
 
     /// Z3 solver parameters to overrride, as key=value pairs. Can be specified multiple times.
+    /// You have to make sure the parameters are valid and make sense (for a given tactic).
     /// Examples: --z3-param smt.mbqi=true --z3-param smt.ematching=false
     #[clap(long, value_name = "KEY=VALUE")]
     z3_param: Vec<String>,
+
+    /// Z3 solver tactic, overriding the default. You have to make sure the tactic is valid and makes sense.
+    /// Example: --z3-tactic qsat
+    #[clap(long)]
+    z3_tactic: Option<String>,
 }
 
 fn main() -> Result<(), anyhow::Error> {
@@ -102,13 +108,13 @@ fn main() -> Result<(), anyhow::Error> {
 
     let mut inference_problem = InferenceProblem::<DynMonotoneBoundedIntSolver>::new();
 
-    // Apply user-provided Z3 parameters
+    // Prepare user-provided Z3 parameters to override
     let mut params = Params::new();
     for param_str in &args.z3_param {
         if let Some((key, value)) = param_str.split_once('=') {
             let key = key.trim();
             let value = value.trim();
-            info!(" setting param {} = {}", key, value);
+            info!("Setting z3 parameter `{}` = `{}`", key, value);
 
             if let Ok(bool_val) = value.parse::<bool>() {
                 params.set_bool(key, bool_val);
@@ -117,20 +123,26 @@ fn main() -> Result<(), anyhow::Error> {
             } else if let Ok(f64_val) = value.parse::<f64>() {
                 params.set_f64(key, f64_val);
             } else {
-                panic!("Warning: Invalid Z3 parameter type for '{key}'. Expected bool/u32/f64");
+                panic!("Invalid Z3 parameter type for `{key}`. Expected bool/u32/f64");
             }
         } else {
-            panic!(
-                "Warning: Invalid Z3 parameter format: '{}'. Expected KEY=VALUE",
-                param_str
-            );
+            panic!("Invalid Z3 parameter format: `{param_str}`. Expected KEY=VALUE",);
         }
     }
 
-    let inner = z3::Solver::new();
-    inner.set_params(&params);
+    // Create the solver using either the specified or default tactic
+    let inner_solver = if let Some(tactic_str) = &args.z3_tactic {
+        info!("Setting z3 tactic `{tactic_str}`");
+        let tactic = Tactic::new(tactic_str);
+        tactic.solver()
+    } else {
+        info!("Using default z3 tactic.");
+        z3::Solver::new()
+    };
 
-    let base_solver = BoundedIntSolver::new_strict(inner);
+    inner_solver.set_params(&params);
+
+    let base_solver = BoundedIntSolver::new_strict(inner_solver);
     let mut solver: DynMonotoneBoundedIntSolver = match args.solver.as_str() {
         "quantified-individual" => Box::new(QuantifiedMonotoneSolver::new(
             base_solver,
