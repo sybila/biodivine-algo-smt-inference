@@ -43,3 +43,7 @@ To specify that a variable is multivalued, you have to explicitly declare its do
 ```
 
 By default, the solver only prints `0/1/?` to indicate that the query is SAT/UNSAT/UNKNOWN. If the model is Boolean, you can print it to a file using `--output-path`. For Boolean and multivalued models, you can also print the update rules directly using a proprietary format with `--print-update-rules`. Use option `--solver` to choose a strategy, which can be one of `instantiated-eager` (default), `instantiated-lazy`, `quantified-individual`, `quantified-merge`.
+
+Additionally, you can control the amount of logging with option `--verbose`. This can provide additional information, such as the number of lemmas for instantiation-based approaches, or number of iterations performed by the lazy instantiation approach.
+
+You can also override the internal Z3 solver parameters with `--z3-param` option (for example, use as `--z3-param smt.ematching=false`, or see help message for more details). You can also override the default Z3 tactic with option `--z3-tactic` (for example, use as `--z3-tactic qsat`, or see help message for more details).
