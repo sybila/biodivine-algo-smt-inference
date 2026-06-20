@@ -1,11 +1,12 @@
 use crate::bn_inference::{InferenceProblem, InferenceProblemEncoder};
 use downcast_rs::{Downcast, impl_downcast};
+use std::fmt::Debug;
 use z3::ast::Bool;
 
 /// Implemented by objects that can be used to assert constraints in an [`InferenceProblem`].
 /// It has access to an [`InferenceProblemEncoder`] which maps the elements of the inference
 /// problem to SMT formulas, plus provides access to the underlying [`InferenceProblem`].
-pub trait InferenceConstraint<SOLVER>: Downcast {
+pub trait InferenceConstraint<SOLVER>: Downcast + Debug {
     /// Validate that this constraint can be safely asserted in the given inference problem.
     fn validate(&self, problem: &InferenceProblem<SOLVER>) -> Result<(), anyhow::Error>;
 
@@ -31,7 +32,7 @@ pub type DynInferenceConstraint<SOLVER> = Box<dyn InferenceConstraint<SOLVER>>;
 /// wrapped into [`crate::bn_inference::constraints::SoftConstraint`] to allow optimization as
 /// soft constraints. Note that the `#[derive(InferenceConstraint)]` currently only works
 /// if `SimpleInferenceConstraint` is implemented for [`crate::smt_solver::AbstractSolver`].
-pub trait SimpleInferenceConstraint<SOLVER>: Downcast {
+pub trait SimpleInferenceConstraint<SOLVER>: Downcast + Debug {
     /// Equivalent to [`InferenceConstraint::validate`].
     fn validate(&self, problem: &InferenceProblem<SOLVER>) -> Result<(), anyhow::Error>;
 

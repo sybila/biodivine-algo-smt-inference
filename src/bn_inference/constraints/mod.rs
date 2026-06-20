@@ -18,5 +18,8 @@ pub use regulator_is_essential::RegulatorIsEssential;
 mod soft_constraint;
 pub use soft_constraint::SoftConstraint;
 
+mod raw_constraint;
+pub use raw_constraint::RawConstraint;
+
 mod utils;
 pub(crate) use utils::*;

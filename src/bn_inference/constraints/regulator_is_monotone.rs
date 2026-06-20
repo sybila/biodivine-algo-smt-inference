@@ -6,6 +6,7 @@ use log::info;
 
 /// TODO: There cant be monotonicity constraints on fully specified functions
 /// at this moment. Support for this will be added later.
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct RegulatorIsMonotone {
     target: VariableId,
     regulator: VariableId,
