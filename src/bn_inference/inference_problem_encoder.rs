@@ -212,8 +212,8 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
     /// and we need to distinguish them from actual update functions sometimes.
     pub fn valid_update_fn_names(&self) -> HashSet<String> {
         self.update_functions
-            .iter()
-            .filter_map(|(_, func)| func.as_func_decl())
+            .values()
+            .filter_map(|func| func.as_func_decl())
             .map(|func| func.name())
             .collect()
     }
