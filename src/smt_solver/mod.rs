@@ -11,8 +11,8 @@ pub use abstract_monotone_solver::Monotonicity;
 mod abstract_bounded_int_solver;
 pub use abstract_bounded_int_solver::AbstractBoundedIntSolver;
 
-mod monotone_solver_qunatified;
-pub use monotone_solver_qunatified::QuantifiedMonotoneSolver;
+mod monotone_solver_quantified;
+pub use monotone_solver_quantified::QuantifiedMonotoneSolver;
 
 mod monotone_solver_instantiated;
 pub use monotone_solver_instantiated::InstantiatedMonotoneSolver;
