@@ -20,6 +20,7 @@ pub trait AbstractMonotoneSolver: AbstractSolver {
     /// the solver should support functions with domain/range using `Int` and `Bool` values.
     /// Returns an error result if the function-argument combination is not supported.
     fn set_monotone(&mut self, f: &FuncDecl, i: usize) -> Result<(), anyhow::Error>;
+
     /// Declare the i-th argument of a function as *negatively monotone*.
     ///
     /// What type of function can be declared as monotone is solver-dependent, but typically,
