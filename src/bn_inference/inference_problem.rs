@@ -8,7 +8,9 @@ use crate::smt_solver::{
     AbstractMonotoneBoundedIntOptimizeSolver, AbstractMonotoneBoundedIntSolver,
 };
 use anyhow::anyhow;
-use biodivine_lib_param_bn::{BooleanNetwork, ModelAnnotation, RegulatoryGraph, VariableId};
+use biodivine_lib_param_bn::{
+    BooleanNetwork, FnUpdate, ModelAnnotation, RegulatoryGraph, VariableId,
+};
 use num_rational::BigRational;
 use num_traits::Zero;
 use std::collections::BTreeSet;
@@ -35,6 +37,12 @@ pub struct VariableData {
     pub domain: (u32, u32),
     /// Regulators of this variable.
     pub regulators: BTreeSet<VariableId>,
+    /// Optional concrete update function expression for this variable. Only fully specified
+    /// Boolean expressions (no parameters) are supported for now.
+    ///
+    /// *Support for integer expressions and partial functions will be implemented later.
+    /// If an expression depends on an integer regulator, it is considered active if non-zero.*
+    pub update_expression: Option<FnUpdate>,
     /// A hidden private field to make sure this struct can only be instantiated by this module.
     _hidden: (),
 }
@@ -77,6 +85,44 @@ impl VariableData {
 
     pub fn new_const(&self, name: &str) -> TypedAst {
         self.ast_type().new_const(name)
+    }
+
+    pub fn has_update_expression(&self) -> bool {
+        self.update_expression.is_some()
+    }
+
+    pub fn update_expression(&self) -> Option<&FnUpdate> {
+        self.update_expression.as_ref()
+    }
+
+    /// A `FnUpdate` can be used as an update expression of [`VariableData`] when:
+    ///  - The target [`VariableData`] describes a Boolean variable.
+    ///  - It contains no explicit parameters.
+    ///  - The expression uses admissible regulator variables.
+    pub fn set_update_expression(&mut self, f: FnUpdate) -> Result<(), anyhow::Error> {
+        if !self.is_boolean() {
+            return Err(anyhow!(
+                "Concrete update expression can only be applied to Boolean variables."
+            ));
+        }
+
+        if !f.collect_parameters().is_empty() {
+            return Err(anyhow!(
+                "Invalid update expression: Can't contain explicit parameters."
+            ));
+        }
+
+        for arg in f.collect_arguments() {
+            if !self.regulators.contains(&arg) {
+                return Err(anyhow!(
+                    "Invalid update expression: Variable `{arg:?}` is not a regulator of `{}`.",
+                    self.name
+                ));
+            }
+        }
+
+        self.update_expression = Some(f);
+        Ok(())
     }
 }
 
@@ -160,6 +206,7 @@ impl<SOLVER: 'static> InferenceProblem<SOLVER> {
             name: name.to_string(),
             domain,
             regulators: BTreeSet::default(),
+            update_expression: None,
             _hidden: (),
         };
         self.declared_variables.push(data);
@@ -205,7 +252,8 @@ impl<SOLVER: 'static> InferenceProblem<SOLVER> {
 
 impl<SOLVER: AbstractMonotoneBoundedIntSolver + 'static> InferenceProblem<SOLVER> {
     /// Completely initialize the [`InferenceProblem`] from the given [`RegulatoryGraph`],
-    /// declaring all variables as Boolean and using their declared regulations.
+    /// declaring all variables as Boolean and using their declared regulations. All update
+    /// expressions are initially set to `None`.
     pub fn from_influence_graph(
         rg: &RegulatoryGraph,
     ) -> Result<InferenceProblem<SOLVER>, anyhow::Error> {
@@ -240,6 +288,26 @@ impl<SOLVER: AbstractMonotoneBoundedIntSolver + 'static> InferenceProblem<SOLVER
         // Declare all essential inputs:
         for c in RegulatorIsEssential::read_from(rg) {
             self.assert_constraint(c)?;
+        }
+
+        Ok(())
+    }
+
+    /// Initialize update expressions using the update functions of the provided [`BooleanNetwork`].
+    ///
+    /// All affected variables and regulations must be declared at this point (see also
+    /// [`Self::from_influence_graph`] and [`Self::initialize_regulations`]).
+    ///
+    /// All function expression must only use declared regulators and must be fully specified
+    /// (no explicit parameters inside update expressions).
+    pub fn initialize_update_expressions(
+        &mut self,
+        bn: &BooleanNetwork,
+    ) -> Result<(), anyhow::Error> {
+        for var in bn.variables() {
+            if let Some(expression) = bn.get_update_function(var) {
+                self[var].set_update_expression(expression.clone())?;
+            }
         }
 
         Ok(())
