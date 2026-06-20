@@ -1,10 +1,10 @@
-use biodivine_algo_smt_inference::bn_inference::constraints::SoftConstraint;
+use biodivine_algo_smt_inference::bn_inference::constraints::{CmpOp, ComparedValue, SoftConstraint, ValueComparison};
 use biodivine_algo_smt_inference::bn_inference::{InferenceProblem, InferenceProblemEncoder};
 use biodivine_algo_smt_inference::smt_solver::{
     AbstractOptimizeSolver, AbstractSolver, BoundedIntSolver, DynMonotoneBoundedIntOptimizeSolver,
     InstantiatedMonotoneSolver, QuantifiedMonotoneSolver,
 };
-use biodivine_lib_param_bn::{BooleanNetwork, ModelAnnotation};
+use biodivine_lib_param_bn::{BooleanNetwork, ModelAnnotation, VariableId};
 use clap::Parser;
 use clap::builder::PossibleValuesParser;
 use log::{debug, error, info};
@@ -161,6 +161,190 @@ fn main() -> Result<(), anyhow::Error> {
     inference_problem.initialize_constraints_and_weights(&psbn, &annotations)?;
 
     info!("Inference problem initialized. Creating constraints.");
+
+    let var_Dnajb4 = psbn.as_graph().find_variable("Dnajb4").unwrap();
+    let var_Yy1 = psbn.as_graph().find_variable("Yy1").unwrap();
+    let var_Fosb = psbn.as_graph().find_variable("Fosb").unwrap();
+    let var_Junb = psbn.as_graph().find_variable("Junb").unwrap();
+    let var_Jund = psbn.as_graph().find_variable("Jund").unwrap();
+    let var_Tbp = psbn.as_graph().find_variable("Tbp").unwrap();
+    let var_Bclaf1 = psbn.as_graph().find_variable("Bclaf1").unwrap();
+    let var_Taf7 = psbn.as_graph().find_variable("Taf7").unwrap();
+    let var_Ep300 = psbn.as_graph().find_variable("Ep300").unwrap();
+    let var_Smarca4 = psbn.as_graph().find_variable("Smarca4").unwrap();
+    let var_Mafk = psbn.as_graph().find_variable("Mafk").unwrap();
+    let var_Gtf2b = psbn.as_graph().find_variable("Gtf2b").unwrap();
+    let var_E2f4 = psbn.as_graph().find_variable("E2f4").unwrap();
+
+    inference_problem.assert_constraint(
+        SoftConstraint::with_weight(
+            ValueComparison::new(
+                ComparedValue::UpdateFunctionOutputInState("CThPN".to_string(), var_Dnajb4),
+                CmpOp::Equal,
+                ComparedValue::UpdateFunctionOutputInPerturbedState(
+                    "CThPN".to_string(), var_Dnajb4, BTreeMap::from([(var_Yy1, 0)])
+                ),
+            ),
+            BigRational::from_float(0.99).unwrap()
+        )
+    )?;
+
+    inference_problem.assert_constraint(
+        SoftConstraint::with_weight(
+            ValueComparison::new(
+                ComparedValue::UpdateFunctionOutputInState("CThPN".to_string(), var_Dnajb4),
+                CmpOp::Equal,
+                ComparedValue::UpdateFunctionOutputInPerturbedState(
+                    "CThPN".to_string(), var_Dnajb4, BTreeMap::from([(var_Fosb, 0)])
+                ),
+            ),
+            BigRational::from_float(0.99).unwrap()
+        )
+    )?;
+
+    inference_problem.assert_constraint(
+        SoftConstraint::with_weight(
+            ValueComparison::new(
+                ComparedValue::UpdateFunctionOutputInState("CThPN".to_string(), var_Dnajb4),
+                CmpOp::Equal,
+                ComparedValue::UpdateFunctionOutputInPerturbedState(
+                    "CThPN".to_string(), var_Dnajb4, BTreeMap::from([(var_Junb, 0)])
+                ),
+            ),
+            BigRational::from_float(0.37).unwrap()
+        )
+    )?;
+
+    inference_problem.assert_constraint(
+        SoftConstraint::with_weight(
+            ValueComparison::new(
+                ComparedValue::UpdateFunctionOutputInState("CThPN".to_string(), var_Dnajb4),
+                CmpOp::Equal,
+                ComparedValue::UpdateFunctionOutputInPerturbedState(
+                    "CThPN".to_string(), var_Dnajb4, BTreeMap::from([(var_Jund, 0)])
+                ),
+            ),
+            BigRational::from_float(0.99).unwrap()
+        )
+    )?;
+
+    inference_problem.assert_constraint(
+        SoftConstraint::with_weight(
+            ValueComparison::new(
+                ComparedValue::UpdateFunctionOutputInState("CThPN".to_string(), var_Dnajb4),
+                CmpOp::Equal,
+                ComparedValue::UpdateFunctionOutputInPerturbedState(
+                    "CThPN".to_string(), var_Dnajb4, BTreeMap::from([(var_Tbp, 1)])
+                ),
+            ),
+            BigRational::from_float(0.98).unwrap()
+        )
+    )?;
+
+    inference_problem.assert_constraint(
+        SoftConstraint::with_weight(
+            ValueComparison::new(
+                ComparedValue::UpdateFunctionOutputInState("CThPN".to_string(), var_Dnajb4),
+                CmpOp::Equal,
+                ComparedValue::UpdateFunctionOutputInPerturbedState(
+                    "CThPN".to_string(), var_Dnajb4, BTreeMap::from([(var_Bclaf1, 1)])
+                ),
+            ),
+            BigRational::from_float(0.99).unwrap()
+        )
+    )?;
+
+    inference_problem.assert_constraint(
+        SoftConstraint::with_weight(
+            ValueComparison::new(
+                ComparedValue::UpdateFunctionOutputInState("CThPN".to_string(), var_Dnajb4),
+                CmpOp::Equal,
+                ComparedValue::UpdateFunctionOutputInPerturbedState(
+                    "CThPN".to_string(), var_Dnajb4, BTreeMap::from([(var_Taf7, 0)])
+                ),
+            ),
+            BigRational::from_float(0.75).unwrap()
+        )
+    )?;
+
+    inference_problem.assert_constraint(
+        SoftConstraint::with_weight(
+            ValueComparison::new(
+                ComparedValue::UpdateFunctionOutputInState("CThPN".to_string(), var_Dnajb4),
+                CmpOp::Equal,
+                ComparedValue::UpdateFunctionOutputInPerturbedState(
+                    "CThPN".to_string(), var_Dnajb4, BTreeMap::from([(var_Ep300, 0)])
+                ),
+            ),
+            BigRational::from_float(0.99).unwrap()
+        )
+    )?;
+
+    inference_problem.assert_constraint(
+        SoftConstraint::with_weight(
+            ValueComparison::new(
+                ComparedValue::UpdateFunctionOutputInState("CThPN".to_string(), var_Dnajb4),
+                CmpOp::Equal,
+                ComparedValue::UpdateFunctionOutputInPerturbedState(
+                    "CThPN".to_string(), var_Dnajb4, BTreeMap::from([(var_Smarca4, 1)])
+                ),
+            ),
+            BigRational::from_float(0.81).unwrap()
+        )
+    )?;
+
+    inference_problem.assert_constraint(
+        SoftConstraint::with_weight(
+            ValueComparison::new(
+                ComparedValue::UpdateFunctionOutputInState("CThPN".to_string(), var_Dnajb4),
+                CmpOp::Equal,
+                ComparedValue::UpdateFunctionOutputInPerturbedState(
+                    "CThPN".to_string(), var_Dnajb4, BTreeMap::from([(var_Mafk, 0)])
+                ),
+            ),
+            BigRational::from_float(0.99).unwrap()
+        )
+    )?;
+
+    inference_problem.assert_constraint(
+        SoftConstraint::with_weight(
+            ValueComparison::new(
+                ComparedValue::UpdateFunctionOutputInState("CThPN".to_string(), var_Dnajb4),
+                CmpOp::Equal,
+                ComparedValue::UpdateFunctionOutputInPerturbedState(
+                    "CThPN".to_string(), var_Dnajb4, BTreeMap::from([(var_Gtf2b, 0)])
+                ),
+            ),
+            BigRational::from_float(0.65).unwrap()
+        )
+    )?;
+
+    inference_problem.assert_constraint(
+        SoftConstraint::with_weight(
+            ValueComparison::new(
+                ComparedValue::UpdateFunctionOutputInState("CThPN".to_string(), var_Dnajb4),
+                CmpOp::Equal,
+                ComparedValue::UpdateFunctionOutputInPerturbedState(
+                    "CThPN".to_string(), var_Dnajb4, BTreeMap::from([(var_E2f4, 0)])
+                ),
+            ),
+            BigRational::from_float(0.59).unwrap()
+        )
+    )?;
+
+
+    inference_problem.assert_constraint(
+        SoftConstraint::with_weight(
+            ValueComparison::new(
+                ComparedValue::UpdateFunctionOutputInState("Microglia".to_string(), var_Dnajb4),
+                CmpOp::Equal,
+                ComparedValue::UpdateFunctionOutputInPerturbedState(
+                    "CThPN".to_string(), var_Dnajb4, BTreeMap::from([(var_Fosb, 1), (var_Taf7, 1)])
+                ),
+            ),
+            BigRational::from_float(0.99).unwrap()
+        )
+    )?;
 
     let encoder = InferenceProblemEncoder::new(
         inference_problem,

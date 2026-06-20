@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use crate::bn_inference::constraints::{check_state_exists, check_variable_exists, sorted_map};
 use crate::smt_solver::typed_ast::AstType;
 use anyhow::anyhow;
@@ -19,6 +20,7 @@ pub enum ComparedValue {
     Constant(u32),
     VariableInState(String, VariableId),
     UpdateFunctionOutputInState(String, VariableId),
+    UpdateFunctionOutputInPerturbedState(String, VariableId, BTreeMap<VariableId, u32>)
 }
 
 impl ComparedValue {
@@ -38,6 +40,14 @@ impl ComparedValue {
                 check_state_exists(problem, state)?;
                 check_variable_exists(problem, *variable)?;
                 Ok(())
+            },
+            ComparedValue::UpdateFunctionOutputInPerturbedState(state, variable, interventions) => {
+                check_state_exists(problem, state)?;
+                check_variable_exists(problem, *variable)?;
+                for intervention in interventions.keys() {
+                    check_variable_exists(problem, *intervention)?;
+                }
+                Ok(())
             }
         }
     }
@@ -54,6 +64,7 @@ impl ComparedValue {
             ComparedValue::Constant(_) => None,
             ComparedValue::VariableInState(_, var) => Some(*var),
             ComparedValue::UpdateFunctionOutputInState(_, var) => Some(*var),
+            ComparedValue::UpdateFunctionOutputInPerturbedState(_, var, _) => Some(*var),
         }
     }
 
@@ -69,6 +80,9 @@ impl ComparedValue {
             }
             ComparedValue::VariableInState(_, variable) => problem[*variable].ast_type(),
             ComparedValue::UpdateFunctionOutputInState(_, variable) => {
+                problem[*variable].ast_type()
+            },
+            ComparedValue::UpdateFunctionOutputInPerturbedState(_, variable, _) => {
                 problem[*variable].ast_type()
             }
         }
@@ -110,6 +124,28 @@ impl ComparedValue {
                     .map(|regulator| encoder.state_atom(state, regulator))
                     .collect::<Vec<_>>();
                 Ok(encoder.mk_update_function_call(*variable, &args))
+            },
+            ComparedValue::UpdateFunctionOutputInPerturbedState(state, variable, interventions) => {
+                if my_type != other_type {
+                    return Err(anyhow!(
+                        "Invalid comparison: `{}` has type `{}`, but need to be `{}`.",
+                        self,
+                        my_type,
+                        other_type
+                    ));
+                }
+                let args = encoder.problem[*variable]
+                    .regulators_iter()
+                    .map(|regulator| {
+                        if let Some(value) = interventions.get(&regulator) {
+                            encoder.problem[regulator].ast_type().new_value(*value)
+                        } else {
+                            encoder.state_atom(state, regulator).clone()
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                let args_ref = args.iter().map(|arg| arg).collect::<Vec<_>>();
+                Ok(encoder.mk_update_function_call(*variable, &args_ref))
             }
         }
     }
@@ -158,6 +194,12 @@ impl Display for ComparedValue {
             }
             ComparedValue::UpdateFunctionOutputInState(state, variable) => {
                 write!(f, "${variable:?}/{state}")
+            },
+            ComparedValue::UpdateFunctionOutputInPerturbedState(state, variable, interventions) => {
+                let interventions = interventions.iter().map(|(variable, value)| {
+                    format!("${variable:?}:{value}")
+                }).collect::<Vec<_>>().join(",");
+                write!(f, "${variable:?}/{state}[{interventions}]")
             }
         }
     }
