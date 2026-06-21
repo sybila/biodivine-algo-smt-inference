@@ -9,4 +9,7 @@ pub use inference_constraint::DynInferenceConstraint;
 pub use inference_constraint::InferenceConstraint;
 pub use inference_constraint::SimpleInferenceConstraint;
 
+mod update_function_definition;
+pub use update_function_definition::UpdateFunctionDefinition;
+
 pub mod constraints;

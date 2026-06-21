@@ -1,15 +1,17 @@
 use crate::bn_inference::InferenceProblem;
+use crate::bn_inference::UpdateFunctionDefinition;
 use crate::bn_inference::constraints::ValueComparison;
 use crate::smt_solver::typed_ast::{MapDynAst, TypedAst};
 use crate::smt_solver::{
     AbstractBoundedIntSolver, AbstractMonotoneSolver, AbstractSolver, IntFunction, model_eval_int,
 };
 use anyhow::anyhow;
+use biodivine_algo_smt_inference::smt_solver::typed_ast::AstType;
 use biodivine_lib_param_bn::{BooleanNetwork, Regulation, RegulatoryGraph, VariableId};
 use log::info;
-use std::collections::BTreeMap;
-use z3::ast::Dynamic;
-use z3::{AstKind, FuncDecl, Model};
+use std::collections::{BTreeMap, HashMap};
+use z3::ast::{Bool, Dynamic, Int};
+use z3::{AstKind, Model};
 
 /// A static collection of SMT formulas and declarations that are collectively used to
 /// actually encode an [`InferenceProblem`] into a solver query. Subsequently, this object
@@ -18,8 +20,8 @@ use z3::{AstKind, FuncDecl, Model};
 pub struct InferenceProblemEncoder<SOLVER> {
     /// Referencing the associated inference problem.
     pub problem: InferenceProblem<SOLVER>,
-    /// An update function declaration of model variables.
-    update_functions: BTreeMap<VariableId, FuncDecl>,
+    /// Update function definitions of model variables.
+    update_functions: BTreeMap<VariableId, UpdateFunctionDefinition>,
     /// Assigns each declared state the literals necessary to construct the state.
     state_atoms: BTreeMap<String, BTreeMap<VariableId, TypedAst>>,
 }
@@ -41,7 +43,10 @@ impl<SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<SOLVER>
         let mut encoder = InferenceProblemEncoder {
             update_functions: problem
                 .variables()
-                .map(|var| (var, Self::mk_update_function(&problem, var)))
+                .map(|var| {
+                    let def = UpdateFunctionDefinition::from_variable_data(&problem, var);
+                    (var, def)
+                })
                 .collect(),
             state_atoms: problem
                 .states()
@@ -75,11 +80,13 @@ impl<SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<SOLVER>
             }
         }
 
-        // Declare domains for known `Int` update functions:
+        // Declare domains for `Int` update functions as long as they are uninterpreted:
         for (var, func) in &encoder.update_functions {
             let var_data = &encoder.problem[*var];
-            if var_data.is_int() {
-                solver.declare_int(func, Some(var_data.domain))?;
+            if var_data.is_int()
+                && let Some(declaration) = func.as_uninterpreted()
+            {
+                solver.declare_int(declaration, Some(var_data.domain))?;
             }
         }
 
@@ -109,24 +116,6 @@ impl<SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<SOLVER>
 }
 
 impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
-    /// A static helper which creates a declaration for a specific update function within
-    /// the given inference problem.
-    ///
-    /// Note that the naming is deterministic, i.e., calling this method multiple times
-    /// with the same `problem` and `variable` produces the same function declaration.
-    fn mk_update_function(problem: &InferenceProblem<SOLVER>, variable: VariableId) -> FuncDecl {
-        let name = format!("update_{}", variable.to_index());
-        let range = problem[variable].sort();
-
-        let regulators = &problem[variable].regulators;
-        let domain = regulators
-            .iter()
-            .map(|it| problem[*it].sort())
-            .collect::<Vec<_>>();
-
-        FuncDecl::new(name, &Vec::from_iter(domain.iter()), &range)
-    }
-
     /// A static helper which creates one free atom for each variable value in a specific state.
     ///
     /// Note that the naming is deterministic, i.e., calling this method multiple times
@@ -144,8 +133,12 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
             .collect()
     }
 
-    /// Retrieve the declaration corresponding to the update function of the given variable.
-    pub fn update_function(&self, variable: VariableId) -> &FuncDecl {
+    /// Retrieve the update function definition of the given variable.
+    ///
+    /// # Panics
+    ///
+    /// Fails if the variable is not valid in this [`InferenceProblemEncoder`].
+    pub fn update_function(&self, variable: VariableId) -> &UpdateFunctionDefinition {
         self.update_functions
             .get(&variable)
             .unwrap_or_else(|| panic!("Variable `{variable:?}` not found."))
@@ -163,7 +156,8 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
     }
 
     /// Create a function application that calls the update function of the given variable
-    /// on the provided arguments.
+    /// on the provided arguments. The result can be either a function application if the
+    /// function is uninterpreted, or an explicit expression if the function is fully defined.
     ///
     /// # Panics
     ///
@@ -192,8 +186,25 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
         }
 
         // Make the function call and wrap it into `TypedAst`.
-        let function_call = function.apply(&args.iter().dyn_vec());
-        TypedAst::cast_dynamic(variable.ast_type(), function_call)
+        match function {
+            UpdateFunctionDefinition::Uninterpreted(declaration) => {
+                TypedAst::cast_dynamic(AstType::Bool, declaration.apply(&args.iter().dyn_vec()))
+            }
+            UpdateFunctionDefinition::FullySpecified(expression) => {
+                let substitutions = Iterator::zip(variable.regulators.iter(), args.iter())
+                    .map(|(var, ast)| {
+                        let ast: Bool = match ast {
+                            // For `Int` variables, require them to be non-zero:
+                            TypedAst::Int(value) => value.ge(Int::from_u64(1)),
+                            // For `Bool` variables, just use them directly:
+                            TypedAst::Bool(value) => value.clone(),
+                        };
+                        (*var, ast)
+                    })
+                    .collect::<HashMap<_, _>>();
+                TypedAst::from_fn_update(expression, &substitutions)
+            }
+        }
     }
 
     /// Extract the valuation of variables in the given state according to the provided Z3 model.
@@ -220,15 +231,28 @@ impl<SOLVER: AbstractMonotoneSolver + 'static> InferenceProblemEncoder<SOLVER> {
     /// Extract the update function inferred for the given [`VariableId`]. This is similar
     /// to using [`AbstractMonotoneSolver::extract_monotone_function_points`],
     /// but it also clamps the arguments of the function to their respective intervals,
-    /// eliminating unnecessary atoms.
+    /// eliminating unnecessary atoms. Furthermore, it should also support fully specified
+    /// update functions.
     pub fn decode_update_function(
         &self,
         variable: VariableId,
         solver: &SOLVER,
         model: &Model,
     ) -> Result<IntFunction, anyhow::Error> {
-        let mut function =
-            solver.extract_monotone_function_points(self.update_function(variable), model)?;
+        let mut function = match self.update_function(variable) {
+            UpdateFunctionDefinition::Uninterpreted(declaration) => {
+                solver.extract_monotone_function_points(declaration, model)?
+            }
+            UpdateFunctionDefinition::FullySpecified(expression) => {
+                let var_data = &self.problem[variable];
+                let arg_signatures = var_data
+                    .regulators_iter()
+                    .map(|var| (var, self.problem[var].ast_type()))
+                    .collect::<Vec<_>>();
+                IntFunction::from_update_function(expression, &arg_signatures)
+            }
+        };
+
         for (i, reg) in self.problem[variable].regulators.iter().enumerate() {
             function.clamp_argument(i, self.problem[*reg].domain);
         }

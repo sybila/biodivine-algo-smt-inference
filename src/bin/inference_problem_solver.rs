@@ -141,6 +141,7 @@ fn main() -> Result<(), anyhow::Error> {
     }
 
     inference_problem.initialize_regulations(psbn.as_graph())?;
+    inference_problem.initialize_update_expressions(&psbn)?;
 
     // Declare all fixed-points:
     for (state_name, observation) in &observations {
