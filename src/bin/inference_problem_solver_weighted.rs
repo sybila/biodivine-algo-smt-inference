@@ -159,6 +159,7 @@ fn main() -> Result<(), anyhow::Error> {
 
     inference_problem.initialize_regulations(psbn.as_graph())?;
     inference_problem.initialize_update_expressions(&psbn)?;
+    inference_problem.initialize_regulation_constraints(psbn.as_graph())?;
     inference_problem.initialize_constraints_and_weights(&psbn, &annotations)?;
 
     info!("Inference problem initialized. Creating constraints.");

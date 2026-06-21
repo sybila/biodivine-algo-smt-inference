@@ -124,7 +124,7 @@ fn main() -> Result<(), anyhow::Error> {
     }
 
     let mut inference_problem =
-        InferenceProblem::<DynMonotoneBoundedIntOptimizeSolver>::from_influence_graph(
+        InferenceProblem::<DynMonotoneBoundedIntOptimizeSolver>::from_regulatory_graph(
             model.as_graph(),
         )?;
 
