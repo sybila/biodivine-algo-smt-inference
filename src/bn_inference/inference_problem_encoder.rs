@@ -6,7 +6,6 @@ use crate::smt_solver::{
     AbstractBoundedIntSolver, AbstractMonotoneSolver, AbstractSolver, IntFunction, model_eval_int,
 };
 use anyhow::anyhow;
-use biodivine_algo_smt_inference::smt_solver::typed_ast::AstType;
 use biodivine_lib_param_bn::{BooleanNetwork, Regulation, RegulatoryGraph, VariableId};
 use log::info;
 use std::collections::{BTreeMap, HashMap};
@@ -187,9 +186,10 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
 
         // Make the function call and wrap it into `TypedAst`.
         match function {
-            UpdateFunctionDefinition::Uninterpreted(declaration) => {
-                TypedAst::cast_dynamic(AstType::Bool, declaration.apply(&args.iter().dyn_vec()))
-            }
+            UpdateFunctionDefinition::Uninterpreted(declaration) => TypedAst::cast_dynamic(
+                variable.ast_type(),
+                declaration.apply(&args.iter().dyn_vec()),
+            ),
             UpdateFunctionDefinition::FullySpecified(expression) => {
                 let substitutions = Iterator::zip(variable.regulators.iter(), args.iter())
                     .map(|(var, ast)| {

@@ -5,7 +5,7 @@ use crate::bn_inference::constraints::StateIsFixedPoint;
 use crate::bn_inference::{InferenceProblem, InferenceProblemEncoder};
 use crate::smt_solver::{BoundedIntSolver, DynMonotoneBoundedIntSolver, QuantifiedMonotoneSolver};
 use biodivine_algo_smt_inference::bn_inference::constraints::ValueComparison;
-use biodivine_lib_param_bn::{BooleanNetwork, FnUpdate};
+use biodivine_lib_param_bn::{BooleanNetwork, FnUpdate, RegulatoryGraph};
 use z3::SatResult;
 
 /// Default solver to use in integration tests.
@@ -148,4 +148,26 @@ fn fully_specified_breaks_essentiality() {
             .to_string()
             .contains("Essentiality mismatch")
     );
+}
+
+#[test]
+fn int_domain_encoding_basic() {
+    // A basic test to verify that int variables with uninterpreted functions can be encoded.
+
+    let rg = RegulatoryGraph::try_from("a -> b").unwrap();
+
+    let mut problem = InferenceProblem::<DynMonotoneBoundedIntSolver>::new();
+    problem.declare_variable("a", (0, 2));
+    problem.declare_variable("b", (0, 1));
+    problem.initialize_regulatory_graph(&rg).unwrap();
+
+    assert!(problem.declare_state("s"));
+    problem
+        .assert_constraint(StateIsFixedPoint::new("s"))
+        .unwrap();
+
+    let mut solver = build_test_solver();
+    let _encoder = InferenceProblemEncoder::new(problem, &mut solver, false).unwrap();
+
+    assert_eq!(solver.check(), SatResult::Sat);
 }
