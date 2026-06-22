@@ -8,7 +8,9 @@ use crate::smt_solver::{
     AbstractMonotoneBoundedIntOptimizeSolver, AbstractMonotoneBoundedIntSolver,
 };
 use anyhow::anyhow;
-use biodivine_lib_param_bn::{BooleanNetwork, ModelAnnotation, RegulatoryGraph, VariableId};
+use biodivine_lib_param_bn::{
+    BooleanNetwork, FnUpdate, ModelAnnotation, RegulatoryGraph, VariableId,
+};
 use num_rational::BigRational;
 use num_traits::Zero;
 use std::collections::BTreeSet;
@@ -35,6 +37,12 @@ pub struct VariableData {
     pub domain: (u32, u32),
     /// Regulators of this variable.
     pub regulators: BTreeSet<VariableId>,
+    /// Optional concrete update function expression for this variable. Only fully specified
+    /// Boolean expressions (no parameters) are supported for now.
+    ///
+    /// *Support for integer expressions and partial functions will be implemented later.
+    /// If an expression depends on an integer regulator, it is considered active if non-zero.*
+    pub update_expression: Option<FnUpdate>,
     /// A hidden private field to make sure this struct can only be instantiated by this module.
     _hidden: (),
 }
@@ -77,6 +85,44 @@ impl VariableData {
 
     pub fn new_const(&self, name: &str) -> TypedAst {
         self.ast_type().new_const(name)
+    }
+
+    pub fn has_update_expression(&self) -> bool {
+        self.update_expression.is_some()
+    }
+
+    pub fn update_expression(&self) -> Option<&FnUpdate> {
+        self.update_expression.as_ref()
+    }
+
+    /// A `FnUpdate` can be used as an update expression of [`VariableData`] when:
+    ///  - The target [`VariableData`] describes a Boolean variable.
+    ///  - It contains no explicit parameters.
+    ///  - The expression uses admissible regulator variables.
+    pub fn set_update_expression(&mut self, f: FnUpdate) -> Result<(), anyhow::Error> {
+        if !self.is_boolean() {
+            return Err(anyhow!(
+                "Concrete update expression can only be applied to Boolean variables."
+            ));
+        }
+
+        if !f.collect_parameters().is_empty() {
+            return Err(anyhow!(
+                "Invalid update expression: Can't contain explicit parameters."
+            ));
+        }
+
+        for arg in f.collect_arguments() {
+            if !self.regulators.contains(&arg) {
+                return Err(anyhow!(
+                    "Invalid update expression: Variable `{arg:?}` is not a regulator of `{}`.",
+                    self.name
+                ));
+            }
+        }
+
+        self.update_expression = Some(f);
+        Ok(())
     }
 }
 
@@ -160,6 +206,7 @@ impl<SOLVER: 'static> InferenceProblem<SOLVER> {
             name: name.to_string(),
             domain,
             regulators: BTreeSet::default(),
+            update_expression: None,
             _hidden: (),
         };
         self.declared_variables.push(data);
@@ -205,8 +252,9 @@ impl<SOLVER: 'static> InferenceProblem<SOLVER> {
 
 impl<SOLVER: AbstractMonotoneBoundedIntSolver + 'static> InferenceProblem<SOLVER> {
     /// Completely initialize the [`InferenceProblem`] from the given [`RegulatoryGraph`],
-    /// declaring all variables as Boolean and using their declared regulations.
-    pub fn from_influence_graph(
+    /// declaring all variables as Boolean and using their declared regulations. All update
+    /// functions are considered uninterpreted.
+    pub fn from_regulatory_graph(
         rg: &RegulatoryGraph,
     ) -> Result<InferenceProblem<SOLVER>, anyhow::Error> {
         let mut inference_problem = InferenceProblem::new();
@@ -217,21 +265,61 @@ impl<SOLVER: AbstractMonotoneBoundedIntSolver + 'static> InferenceProblem<SOLVER
             assert_eq!(var_p, var);
         }
 
-        inference_problem.initialize_regulations(rg)?;
+        inference_problem.initialize_regulatory_graph(rg)?;
+        Ok(inference_problem)
+    }
+
+    /// Completely initialize the [`InferenceProblem`] using the given [`BooleanNetwork`],
+    /// including all Boolean variables, regulations, regulatory constraints and fully
+    /// specified functions.
+    pub fn from_partially_specified_network(
+        psbn: &BooleanNetwork,
+    ) -> Result<InferenceProblem<SOLVER>, anyhow::Error> {
+        let mut inference_problem = InferenceProblem::new();
+
+        // Declare all variables:
+        for var in psbn.variables() {
+            let var_p = inference_problem.declare_variable(psbn.get_variable_name(var), (0, 1));
+            assert_eq!(var_p, var);
+        }
+
+        inference_problem.initialize_regulations(psbn.as_graph())?;
+        inference_problem.initialize_update_expressions(psbn)?;
+        inference_problem.initialize_regulation_constraints(psbn.as_graph())?;
         Ok(inference_problem)
     }
 
     /// Initialize regulations between variables based on the provided [`RegulatoryGraph`],
-    /// assuming all variables are already declared.
+    /// including all regulation constraints.
     ///
-    /// This can be used as a helper function when you want to use a specific graph, but want
-    /// to override variable domains.
+    /// Compared to [`Self::from_regulatory_graph`], this can be used as a helper function
+    /// when you want to use a specific graph, but with different variable domains.
+    pub fn initialize_regulatory_graph(
+        &mut self,
+        rg: &RegulatoryGraph,
+    ) -> Result<(), anyhow::Error> {
+        self.initialize_regulations(rg)?;
+        self.initialize_regulation_constraints(rg)?;
+        Ok(())
+    }
+
+    /// Initialize the regulators of each variable according to the provided [`RegulatoryGraph`],
+    /// (does not assert any monotonicity or essentiality constraints).
     pub fn initialize_regulations(&mut self, rg: &RegulatoryGraph) -> Result<(), anyhow::Error> {
         // Declare all regulations:
         for reg in rg.regulations() {
             self[reg.target].regulators.insert(reg.regulator);
         }
 
+        Ok(())
+    }
+
+    /// Initialize the regulation constraints (monotonicity and essentiality) with the assumption
+    /// that all relevant regulations already exist.
+    pub fn initialize_regulation_constraints(
+        &mut self,
+        rg: &RegulatoryGraph,
+    ) -> Result<(), anyhow::Error> {
         // Declare all monotonic inputs (these need to go first):
         for c in RegulatorIsMonotone::read_from(rg) {
             self.assert_constraint(c)?;
@@ -245,10 +333,30 @@ impl<SOLVER: AbstractMonotoneBoundedIntSolver + 'static> InferenceProblem<SOLVER
         Ok(())
     }
 
+    /// Initialize update expressions using the update functions of the provided [`BooleanNetwork`].
+    ///
+    /// All affected variables and regulations must be declared at this point (see also
+    /// [`Self::from_regulatory_graph`] and [`Self::initialize_regulatory_graph`]).
+    ///
+    /// All function expression must only use declared regulators and must be fully specified
+    /// (no explicit parameters inside update expressions).
+    pub fn initialize_update_expressions(
+        &mut self,
+        bn: &BooleanNetwork,
+    ) -> Result<(), anyhow::Error> {
+        for var in bn.variables() {
+            if let Some(expression) = bn.get_update_function(var) {
+                self[var].set_update_expression(expression.clone())?;
+            }
+        }
+
+        Ok(())
+    }
+
     /// Read all constraints from an annotated `.aeon` file, **ignoring** any weights
     /// and priority classes, and assert them into the provided inference problem.
     ///
-    /// This assumes that [`Self::initialize_regulations`] (or [`Self::from_influence_graph`])
+    /// This assumes that [`Self::initialize_regulatory_graph`] (or [`Self::from_regulatory_graph`])
     /// was already called on to populate the inference problem with variables and regulations.
     pub fn initialize_constraints(
         &mut self,
@@ -296,7 +404,7 @@ impl<SOLVER: AbstractMonotoneBoundedIntOptimizeSolver + 'static> InferenceProble
     /// Read all constraints from an annotated `.aeon` file, including any weights
     /// and priority classes, and assert them into the provided inference problem.
     ///
-    /// This assumes that [`Self::initialize_regulations`] (or [`Self::from_influence_graph`])
+    /// This assumes that [`Self::initialize_regulatory_graph`] (or [`Self::from_regulatory_graph`])
     /// was already called on this inference problem.
     pub fn initialize_constraints_and_weights(
         &mut self,

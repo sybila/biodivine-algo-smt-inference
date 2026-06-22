@@ -1,4 +1,6 @@
 use anyhow::anyhow;
+use biodivine_lib_param_bn::{BinaryOp, FnUpdate, VariableId};
+use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use z3::ast::{Ast, Bool, Dynamic, Int};
 use z3::{SortKind, Symbol};
@@ -140,6 +142,13 @@ impl TypedAst {
         }
     }
 
+    pub fn as_bool(&self) -> Option<&Bool> {
+        match self {
+            TypedAst::Int(_) => None,
+            TypedAst::Bool(value) => Some(value),
+        }
+    }
+
     pub fn ast_type(&self) -> AstType {
         match self {
             TypedAst::Int(_) => AstType::Int,
@@ -200,6 +209,46 @@ impl TypedAst {
                 other.sort_kind()
             )),
         }
+    }
+
+    /// Transform fully specified [`FnUpdate`] into a Boolean [`TypedAst`] expression
+    /// with all variables substituted into [`Bool`] AST nodes according
+    /// to the `substitution_map`.
+    ///
+    /// # Panics
+    ///
+    /// The method panics if the given function contains parameters or if some variables
+    /// are missing from the `substitution_map`.
+    pub fn from_fn_update(
+        fn_update: &FnUpdate,
+        substitution_map: &HashMap<VariableId, Bool>,
+    ) -> TypedAst {
+        fn build(fn_update: &FnUpdate, map: &HashMap<VariableId, Bool>) -> Bool {
+            match fn_update {
+                FnUpdate::Const(value) => Bool::from_bool(*value),
+                FnUpdate::Var(id) => map
+                    .get(id)
+                    .unwrap_or_else(|| panic!("Variable `{id}` not present in `substitution_map`."))
+                    .clone(),
+                FnUpdate::Param(_, _) => {
+                    panic!("`TypedAst::from_fn_update` does not support parameters.")
+                }
+                FnUpdate::Not(inner) => build(inner, map).not(),
+                FnUpdate::Binary(op, left, right) => {
+                    let left = build(left, map);
+                    let right = build(right, map);
+                    match op {
+                        BinaryOp::And => Bool::and(&[left, right]),
+                        BinaryOp::Or => Bool::or(&[left, right]),
+                        BinaryOp::Xor => left.xor(right),
+                        BinaryOp::Iff => left.iff(right),
+                        BinaryOp::Imp => left.implies(right),
+                    }
+                }
+            }
+        }
+
+        Self::from(build(fn_update, substitution_map))
     }
 }
 
