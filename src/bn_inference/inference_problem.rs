@@ -13,7 +13,6 @@ use biodivine_lib_param_bn::{
 };
 use num_rational::BigRational;
 use num_traits::Zero;
-
 use std::collections::BTreeSet;
 use std::ops::{Index, IndexMut};
 use z3::ast::Bool;
