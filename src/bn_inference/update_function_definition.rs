@@ -16,10 +16,11 @@ impl UpdateFunctionDefinition {
     /// Build a new [`UpdateFunctionDefinition`] for the given `variable` using data stored
     /// in the provided [`InferenceProblem`].
     ///
-    /// If [`VariableData::update_expression`] is set, create a fully specified function;
-    /// otherwise create an uninterpreted function. Note that the naming of uninterpreted functions
-    /// is deterministic, i.e., calling this method multiple times with the same `problem` and
-    /// `variable` produces equivalent uninterpreted function declaration.
+    /// If the variable has a [`FnUpdate`] expression, create a fully specified function;
+    /// otherwise create an uninterpreted function. Note that the naming of uninterpreted
+    /// functions is deterministic, i.e., calling this method multiple
+    /// times with the same `problem` and `variable` produces equivalent
+    /// uninterpreted function declaration.
     pub fn from_variable_data<SOLVER: AbstractSolver + 'static>(
         problem: &InferenceProblem<SOLVER>,
         variable: VariableId,
