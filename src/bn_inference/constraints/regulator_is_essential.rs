@@ -65,6 +65,16 @@ impl<SOLVER: AbstractBoundedIntSolver + 'static> InferenceConstraint<SOLVER>
             // major performance issues. Subsequently, there is no need to add additional
             // assertions to the main query.
 
+            // Note (1): If the regulators are ints, we consider them true iff they are non-zero.
+            // Consequently, we can simply treat them as Boolean when performing this extra
+            // solver check, because any non-zero value will produce the same truth value
+            // in our fully specified expression.
+
+            // Note (2): Technically, this check is not necessary. The property could be
+            // embedded into the main solver query. However, this (a) simplifies the main query
+            // when possible and (b) makes the error path consistent with monotonicity errors,
+            // failing during encoding if the fully specified expression is inconsistent.
+
             let target_data = &encoder.problem[self.target];
             let arg_prefix = "fully_specified_arg";
 

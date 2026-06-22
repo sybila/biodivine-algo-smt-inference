@@ -87,6 +87,11 @@ impl<SOLVER: AbstractMonotoneSolver + 'static> InferenceConstraint<SOLVER> for R
                 // query should be very simple to check and should not cause any
                 // major performance issues.
 
+                // Note: If the regulators are ints, we consider them true iff they are non-zero.
+                // Consequently, we can simply treat them as Boolean when performing this extra
+                // solver check, because any non-zero value will produce the same truth value
+                // in our fully specified expression.
+
                 let target_data = &encoder.problem[self.target];
                 let arg_prefix = "fully_specified_arg";
 
