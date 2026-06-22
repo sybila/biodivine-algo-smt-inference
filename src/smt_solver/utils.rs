@@ -5,10 +5,12 @@ use std::collections::HashSet;
 use z3::ast::{Ast, Bool, Dynamic, Int};
 use z3::{DeclKind, FuncDecl, Model};
 
-/// Extract all uninterpreted function applications from the given expression. The expression is
-/// only allowed to use `Int` and `Bool` functions.
+/// Extract all uninterpreted function applications within unquantified formulas (any
+/// usage inside quantifiers is ignored). The expression
+/// is only allowed to use `Int` and `Bool` functions.
 ///
-/// TODO: For now, this is ignoring usages that appear inside quantifiers...
+/// Note that this also returns all occurring constants (including state constants),
+/// not just update functions, as these are zero-arity function applications.
 pub fn extract_function_applications(fml: &Bool) -> LinkedHashSet<Dynamic> {
     let mut todo = vec![Dynamic::from_ast(fml)];
     let mut results: LinkedHashSet<Dynamic> = LinkedHashSet::new();
@@ -27,7 +29,7 @@ pub fn extract_function_applications(fml: &Bool) -> LinkedHashSet<Dynamic> {
         }
 
         // Check if the expression is a non-trivial uninterpreted function application, and if so,
-        // save it.
+        // save it. Note that constants are also valid function applications (with 0 arguments).
         if expr.is_app() && expr.decl().kind() == DeclKind::Uninterpreted {
             results.insert(expr);
         }
@@ -36,9 +38,10 @@ pub fn extract_function_applications(fml: &Bool) -> LinkedHashSet<Dynamic> {
     results
 }
 
-/// Extract all uninterpreted function usages (including zero-arity constants) of type `Int`.
+/// Extract all uninterpreted function usages (including zero-arity constants) of type `Int`
+/// within unquantified formulas (any usage inside quantifiers is ignored).
 ///
-/// TODO: For now, this is ignoring usages that appear inside quantifiers...
+/// Note that this also returns all state constants, not just update functions.
 pub fn extract_int_functions(fml: &Bool) -> LinkedHashSet<Int> {
     let mut todo = vec![Dynamic::from_ast(fml)];
     let mut results: LinkedHashSet<Int> = LinkedHashSet::new();
