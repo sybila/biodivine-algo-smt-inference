@@ -162,9 +162,6 @@ fn main() -> Result<(), anyhow::Error> {
 
     inference_problem.initialize_constraints(&psbn, &annotations)?;
 
-    // TODO: fully specified functions are ignored for now (all updates are considered uninterpreted)
-    //inference_problem.initialize_update_expressions(&psbn)?;
-
     info!("Inference problem initialized. Creating solver...");
 
     let encoder = InferenceProblemEncoder::new(
@@ -207,22 +204,9 @@ fn main() -> Result<(), anyhow::Error> {
 
         if args.print_update_rules {
             for var in psbn.variables() {
-                if let Some(update_expr) = encoder.update_function(var).as_fully_specified() {
-                    // Fully specified functions are printed as is
-                    println!(
-                        "=== Function expression {} (fully specified) ===",
-                        psbn.get_variable_name(var)
-                    );
-                    println!("{}\n", update_expr.to_string(&psbn));
-                } else {
-                    // Uninterpreted functions are extracted from the inferred solutions
-                    let function = encoder.decode_update_function(var, &solver, &model)?;
-                    println!(
-                        "=== Function table {} (inferred) ===",
-                        psbn.get_variable_name(var)
-                    );
-                    println!("{}", function);
-                }
+                let function = encoder.decode_update_function(var, &solver, &model)?;
+                println!("=== Function table {} ===", psbn.get_variable_name(var));
+                println!("{}", function);
             }
         }
     }
