@@ -3,13 +3,22 @@ name = "biodivine-algo-smt-inference"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["z3-gh-release"]
+
+# Faster build, but may not work on every platform (a pre-built Z3 release must be on GitHub).
+z3-gh-release = ["z3/gh-release", "z3/num"]
+
+# Slower build, but more robust (will build a fresh Z3 instance every time).
+z3-vendored = ["z3/vendored", "z3/num"]
+
 [dependencies]
 macros = { path = "macros" }
 biodivine-lib-param-bn = "0.7.2"
 biodivine-lib-bdd = "0.6.3"
 itertools = "0.14.0"
 #z3 = "0.19.2"
-z3 = { git = "https://github.com/sybila/z3.rs.git", rev = "4f33bd7c71c506a000ace76e689c9e01e4a8de21" }
+z3 = { git = "https://github.com/sybila/z3.rs.git", rev = "3dc14105d4589c61d68f1fe6ce85b503e31ce290" }
 num-rational = "0.4.2"
 num-traits = "0.2.19"
 csv = "1.4"

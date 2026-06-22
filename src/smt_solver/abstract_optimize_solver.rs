@@ -46,6 +46,6 @@ impl AbstractOptimizeSolver for z3::Optimize {
     }
 
     fn register_model_handler(&self, callback: Box<dyn Fn(&Model)>) {
-        z3::Optimize::register_model_handler(self, callback)
+        z3::Optimize::set_model_handler(self, callback)
     }
 }
