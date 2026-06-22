@@ -51,10 +51,6 @@ impl<SOLVER: AbstractBoundedIntSolver + 'static> InferenceConstraint<SOLVER>
             self.regulator, self.target
         );
         let target_data = &encoder.problem[self.target];
-        let regulator_data = &encoder.problem[self.regulator];
-        let argument_index = encoder.problem[self.target]
-            .regulator_index(self.regulator)
-            .unwrap_or_else(|| unreachable!()); // Must fail during validation.
 
         if let UpdateFunctionDefinition::FullySpecified(expression) =
             encoder.update_function(self.target)
@@ -75,7 +71,6 @@ impl<SOLVER: AbstractBoundedIntSolver + 'static> InferenceConstraint<SOLVER>
             // when possible and (b) makes the error path consistent with monotonicity errors,
             // failing during encoding if the fully specified expression is inconsistent.
 
-            let target_data = &encoder.problem[self.target];
             let arg_prefix = "fully_specified_arg";
 
             let mut args = target_data
@@ -111,6 +106,11 @@ impl<SOLVER: AbstractBoundedIntSolver + 'static> InferenceConstraint<SOLVER>
 
         // If the function is uninterpreted, build a general query that will be added
         // to the inference constraints.
+
+        let regulator_data = &encoder.problem[self.regulator];
+        let argument_index = encoder.problem[self.target]
+            .regulator_index(self.regulator)
+            .unwrap_or_else(|| unreachable!()); // Must fail during validation.
 
         let essential_name = format!(
             "essential_{}_{}",
