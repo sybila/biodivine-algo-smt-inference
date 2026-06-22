@@ -176,10 +176,7 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
     ///
     /// If the number of arguments or argument types do not match what is expected for
     /// the update function, or if the given variable does not exist at all.
-    ///
-    /// TODO: change this for specified update functions
     pub fn mk_update_function_call(&self, variable: VariableId, args: &[&TypedAst]) -> TypedAst {
-        // Check that the variable exists.
         let function = self.update_function(variable);
 
         // Check that the type is correct.
@@ -378,11 +375,6 @@ impl<SOLVER: AbstractMonotoneSolver + 'static> InferenceProblemEncoder<SOLVER> {
         Ok(function)
     }
 
-    /// Decode the inferred Boolean network.
-    ///
-    /// The functions that were uninterpreted are extracted from the inferred solution
-    /// with [Self::decode_update_function]. The functions that were fully specified from
-    /// the start are left as specified.
     pub fn decode_boolean_network(
         &self,
         solver: &SOLVER,
