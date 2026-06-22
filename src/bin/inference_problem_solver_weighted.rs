@@ -158,6 +158,8 @@ fn main() -> Result<(), anyhow::Error> {
     }
 
     inference_problem.initialize_regulations(psbn.as_graph())?;
+    inference_problem.initialize_update_expressions(&psbn)?;
+    inference_problem.initialize_regulation_constraints(psbn.as_graph())?;
     inference_problem.initialize_constraints_and_weights(&psbn, &annotations)?;
 
     // TODO: fully specified functions are ignored for now (all updates are considered uninterpreted)
@@ -253,7 +255,7 @@ fn report_solution(
 
         if args.print_update_rules {
             for var in psbn.variables() {
-                if let Some(update_expr) = encoder.update_function(var).as_fn_update() {
+                if let Some(update_expr) = encoder.update_function(var).as_fully_specified() {
                     // Fully specified functions are printed as is
                     println!(
                         "=== Function expression {} (fully specified) ===",

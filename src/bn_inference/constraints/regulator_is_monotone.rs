@@ -1,11 +1,15 @@
 use crate::bn_inference::constraints::{check_regulator_exists, check_variable_exists};
 use crate::bn_inference::{InferenceConstraint, InferenceProblem, InferenceProblemEncoder};
 use crate::smt_solver::AbstractMonotoneSolver;
+use crate::smt_solver::typed_ast::TypedAst;
+use anyhow::anyhow;
+use biodivine_algo_smt_inference::bn_inference::UpdateFunctionDefinition;
 use biodivine_lib_param_bn::{Monotonicity, RegulatoryGraph, VariableId};
 use log::info;
+use std::collections::HashMap;
+use z3::SatResult;
+use z3::ast::Bool;
 
-/// TODO: There cant be monotonicity constraints on fully specified functions
-/// at this moment. Support for this will be added later.
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct RegulatorIsMonotone {
     target: VariableId,
@@ -59,30 +63,76 @@ impl<SOLVER: AbstractMonotoneSolver + 'static> InferenceConstraint<SOLVER> for R
         encoder: &InferenceProblemEncoder<SOLVER>,
         solver: &mut SOLVER,
     ) -> Result<(), anyhow::Error> {
-        // TODO: Monotonicity for fully specified functions needs to be checked directly via a
-        //       different mechanism within the encoder in future. We just ignore it here for now.
-        let update_fn = encoder.update_function(self.target);
-        if !update_fn.is_uninterpreted() {
-            info!(
-                "Ignoring monotonicity of `{:?}` -> `{:?}` because {:?} has fully specified function.",
-                self.regulator, self.target, self.target
-            );
-            return Ok(());
-        }
-
         info!(
             "Asserting: regulator `{:?}` is monotone (is_positive={}) in target `{:?}`.",
             self.regulator, self.is_positive, self.target
         );
-        let function = update_fn.as_func_decl().unwrap(); // Can safely unwrap now.
-        let argument = encoder.problem[self.target]
+        let function = encoder.update_function(self.target);
+        let argument_index = encoder.problem[self.target]
             .regulator_index(self.regulator)
             .unwrap_or_else(|| unreachable!()); // Must fail during validation.
 
-        if self.is_positive {
-            solver.set_monotone(function, argument)
-        } else {
-            solver.set_antimonotone(function, argument)
+        match function {
+            UpdateFunctionDefinition::Uninterpreted(function) => {
+                // If the function is uninterpreted, assert monotonicity as a solver property.
+                if self.is_positive {
+                    solver.set_monotone(function, argument_index)
+                } else {
+                    solver.set_antimonotone(function, argument_index)
+                }
+            }
+            UpdateFunctionDefinition::FullySpecified(expression) => {
+                // If the function is fully specified, execute a completely separate solver
+                // query to verify that monotonicity holds. Under normal circumstances, this
+                // query should be very simple to check and should not cause any
+                // major performance issues.
+
+                // Note: If the regulators are ints, we consider them true iff they are non-zero.
+                // Consequently, we can simply treat them as Boolean when performing this extra
+                // solver check, because any non-zero value will produce the same truth value
+                // in our fully specified expression.
+
+                let target_data = &encoder.problem[self.target];
+                let arg_prefix = "fully_specified_arg";
+
+                let mut args = target_data
+                    .regulators_iter()
+                    .map(|reg| (reg, Bool::fresh_const(arg_prefix)))
+                    .collect::<HashMap<_, _>>();
+
+                args.insert(self.regulator, Bool::from_bool(false));
+                let low = TypedAst::from_fn_update(expression, &args);
+
+                args.insert(self.regulator, Bool::from_bool(true));
+                let high = TypedAst::from_fn_update(expression, &args);
+
+                let assertion = if self.is_positive {
+                    // For positive monotonicity, we want to find a counter example
+                    // where `f(high) < f(low)` (increasing input decreases output).
+                    high.lt(&low)
+                } else {
+                    low.lt(&high)
+                }?;
+
+                // Make a new solver, add the assertion, and check that it is unsatisfiable,
+                // i.e., no counter example exists and thus the expression is monotonic.
+                let solver = z3::Solver::new();
+                solver.assert(assertion);
+
+                match solver.check() {
+                    SatResult::Unsat => Ok(()),
+                    SatResult::Unknown => {
+                        unreachable!(
+                            "Monotonicity of fully specified expression is always decidable."
+                        )
+                    }
+                    SatResult::Sat => Err(anyhow!(
+                        "Monotonicity mismatch for regulator `{}` in `{}`",
+                        self.regulator,
+                        expression
+                    )),
+                }
+            }
         }
     }
 }

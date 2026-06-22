@@ -1,4 +1,5 @@
 use crate::bn_inference::InferenceProblem;
+use crate::bn_inference::UpdateFunctionDefinition;
 use crate::bn_inference::constraints::ValueComparison;
 use crate::smt_solver::typed_ast::{AstType, MapDynAst, TypedAst};
 use crate::smt_solver::{
@@ -6,46 +7,11 @@ use crate::smt_solver::{
     model_substitute_args_int_function,
 };
 use anyhow::anyhow;
-use biodivine_lib_param_bn::{BooleanNetwork, FnUpdate, Regulation, RegulatoryGraph, VariableId};
+use biodivine_lib_param_bn::{BooleanNetwork, Regulation, RegulatoryGraph, VariableId};
 use log::info;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use z3::ast::{Bool, Dynamic, Int};
-use z3::{AstKind, FuncDecl, Model};
-
-/// Update function represented either by a fully specified [FnUpdate] expression
-/// or an uninterpreted fn declaration [FuncDecl].
-pub enum UpdateFunction {
-    Uninterpreted(FuncDecl),
-    FullySpecified(FnUpdate),
-}
-
-impl UpdateFunction {
-    pub fn mk_uninterpreted(func_decl: FuncDecl) -> UpdateFunction {
-        UpdateFunction::Uninterpreted(func_decl)
-    }
-
-    pub fn mk_ufully_specified(fn_update: FnUpdate) -> UpdateFunction {
-        UpdateFunction::FullySpecified(fn_update)
-    }
-
-    pub fn is_uninterpreted(&self) -> bool {
-        matches!(self, UpdateFunction::Uninterpreted(..))
-    }
-
-    pub fn as_func_decl(&self) -> Option<&FuncDecl> {
-        match self {
-            UpdateFunction::Uninterpreted(fn_decl) => Some(fn_decl),
-            _ => None,
-        }
-    }
-
-    pub fn as_fn_update(&self) -> Option<&FnUpdate> {
-        match self {
-            UpdateFunction::FullySpecified(fn_update) => Some(fn_update),
-            _ => None,
-        }
-    }
-}
+use z3::{AstKind, Model};
 
 /// A static collection of SMT formulas and declarations that are collectively used to
 /// actually encode an [`InferenceProblem`] into a solver query. Subsequently, this object
@@ -54,9 +20,8 @@ impl UpdateFunction {
 pub struct InferenceProblemEncoder<SOLVER> {
     /// Referencing the associated inference problem.
     pub problem: InferenceProblem<SOLVER>,
-    /// Update functions for model variables, can be either uninterpreted function declaration
-    /// or a fully specified expression (this option is for Boolean only).
-    update_functions: BTreeMap<VariableId, UpdateFunction>,
+    /// Update function definitions of model variables.
+    update_functions: BTreeMap<VariableId, UpdateFunctionDefinition>,
     /// Assigns each declared state the literals necessary to construct the state.
     state_atoms: BTreeMap<String, BTreeMap<VariableId, TypedAst>>,
 }
@@ -79,12 +44,8 @@ impl<SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<SOLVER>
             update_functions: problem
                 .variables()
                 .map(|var| {
-                    if let Some(fn_update) = &problem[var].update_expr {
-                        (var, UpdateFunction::FullySpecified(fn_update.clone()))
-                    } else {
-                        let func_decl = Self::mk_update_function_decl(&problem, var);
-                        (var, UpdateFunction::Uninterpreted(func_decl))
-                    }
+                    let def = UpdateFunctionDefinition::from_variable_data(&problem, var);
+                    (var, def)
                 })
                 .collect(),
             state_atoms: problem
@@ -119,15 +80,13 @@ impl<SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<SOLVER>
             }
         }
 
-        // Declare domains for known `Int` update functions:
+        // Declare domains for `Int` update functions as long as they are uninterpreted:
         for (var, func) in &encoder.update_functions {
             let var_data = &encoder.problem[*var];
-            if var_data.is_int() {
-                if let Some(fn_decl) = func.as_func_decl() {
-                    solver.declare_int(fn_decl, Some(var_data.domain))?;
-                } else {
-                    panic!("Cannot have int functions with fully specified expressions.");
-                }
+            if var_data.is_int()
+                && let Some(declaration) = func.as_uninterpreted()
+            {
+                solver.declare_int(declaration, Some(var_data.domain))?;
             }
         }
 
@@ -149,8 +108,6 @@ impl<SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<SOLVER>
         }
 
         for constraint in encoder.problem.constraints() {
-            // TODO: solve monotonicity constraints for fully specified functions directly
-            //       before calling the other asserts
             constraint.assert_self(&encoder, solver)?;
         }
 
@@ -159,27 +116,6 @@ impl<SOLVER: AbstractBoundedIntSolver + 'static> InferenceProblemEncoder<SOLVER>
 }
 
 impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
-    /// A static helper which creates a declaration for a specific update function within
-    /// the given inference problem.
-    ///
-    /// Note that the naming is deterministic, i.e., calling this method multiple times
-    /// with the same `problem` and `variable` produces the same function declaration.
-    fn mk_update_function_decl(
-        problem: &InferenceProblem<SOLVER>,
-        variable: VariableId,
-    ) -> FuncDecl {
-        let name = format!("update_{}", variable.to_index());
-        let range = problem[variable].sort();
-
-        let regulators = &problem[variable].regulators;
-        let domain = regulators
-            .iter()
-            .map(|it| problem[*it].sort())
-            .collect::<Vec<_>>();
-
-        FuncDecl::new(name, &Vec::from_iter(domain.iter()), &range)
-    }
-
     /// A static helper which creates one free atom for each variable value in a specific state.
     ///
     /// Note that the naming is deterministic, i.e., calling this method multiple times
@@ -197,9 +133,12 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
             .collect()
     }
 
-    /// Retrieve either the declaration corresponding to uninterpreted update function
-    /// of the given variable or its expression.
-    pub fn update_function(&self, variable: VariableId) -> &UpdateFunction {
+    /// Retrieve the update function definition of the given variable.
+    ///
+    /// # Panics
+    ///
+    /// Fails if the variable is not valid in this [`InferenceProblemEncoder`].
+    pub fn update_function(&self, variable: VariableId) -> &UpdateFunctionDefinition {
         self.update_functions
             .get(&variable)
             .unwrap_or_else(|| panic!("Variable `{variable:?}` not found."))
@@ -213,7 +152,7 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
     pub fn valid_update_fn_names(&self) -> HashSet<String> {
         self.update_functions
             .values()
-            .filter_map(|func| func.as_func_decl())
+            .filter_map(|func| func.as_uninterpreted())
             .map(|func| func.name())
             .collect()
     }
@@ -230,7 +169,8 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
     }
 
     /// Create a function application that calls the update function of the given variable
-    /// on the provided arguments.
+    /// on the provided arguments. The result can be either a function application if the
+    /// function is uninterpreted, or an explicit expression if the function is fully defined.
     ///
     /// # Panics
     ///
@@ -261,25 +201,24 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
         }
 
         // Make the function call and wrap it into `TypedAst`.
-        // If the function is fully specified, replace the formal arguments with actual
-        // args and also wrap it into `TypedAst`.
         match function {
-            UpdateFunction::Uninterpreted(func_decl) => {
-                let function_call = func_decl.apply(&args.iter().dyn_vec());
-                TypedAst::cast_dynamic(variable.ast_type(), function_call)
-            }
-            UpdateFunction::FullySpecified(fn_update) => {
-                let substitution_map = variable
-                    .regulators
-                    .clone()
-                    .into_iter()
-                    .zip(args.iter().map(|arg| {
-                        arg.as_bool().cloned().unwrap_or_else(|| {
-                            panic!("Only pure Boolean functions can be fully specified.")
-                        })
-                    }))
-                    .collect();
-                TypedAst::from_fn_update(fn_update, &substitution_map)
+            UpdateFunctionDefinition::Uninterpreted(declaration) => TypedAst::cast_dynamic(
+                variable.ast_type(),
+                declaration.apply(&args.iter().dyn_vec()),
+            ),
+            UpdateFunctionDefinition::FullySpecified(expression) => {
+                let substitutions = Iterator::zip(variable.regulators.iter(), args.iter())
+                    .map(|(var, ast)| {
+                        let ast: Bool = match ast {
+                            // For `Int` variables, require them to be non-zero:
+                            TypedAst::Int(value) => value.ge(Int::from_u64(1)),
+                            // For `Bool` variables, just use them directly:
+                            TypedAst::Bool(value) => value.clone(),
+                        };
+                        (*var, ast)
+                    })
+                    .collect::<HashMap<_, _>>();
+                TypedAst::from_fn_update(expression, &substitutions)
             }
         }
     }
@@ -409,32 +348,34 @@ impl<SOLVER: AbstractMonotoneSolver + 'static> InferenceProblemEncoder<SOLVER> {
     /// Extract the update function inferred for the given [`VariableId`]. This is similar
     /// to using [`AbstractMonotoneSolver::extract_monotone_function_points`],
     /// but it also clamps the arguments of the function to their respective intervals,
-    /// eliminating unnecessary atoms.
-    ///
-    /// IMPORTANT: Only interpretations of truly uninterpreted functions can be extracted.
-    ///            You have to make sure not to extract fully specified functions not present
-    ///            in the model (and extract these with [Self::update_function] directly).
+    /// eliminating unnecessary atoms. Furthermore, it should also support fully specified
+    /// update functions.
     pub fn decode_update_function(
         &self,
         variable: VariableId,
         solver: &SOLVER,
         model: &Model,
     ) -> Result<IntFunction, anyhow::Error> {
-        if let Some(func_decl) = self.update_function(variable).as_func_decl() {
-            let mut function = solver.extract_monotone_function_points(func_decl, model)?;
-            for (i, reg) in self.problem[variable].regulators.iter().enumerate() {
-                function.clamp_argument(i, self.problem[*reg].domain);
+        let mut function = match self.update_function(variable) {
+            UpdateFunctionDefinition::Uninterpreted(declaration) => {
+                solver.extract_monotone_function_points(declaration, model)?
             }
-            function.drop_default_output_level();
-            function.remove_duplicates();
-            Ok(function)
-        } else {
-            // TODO: Do we want to also directly deal with the case of fully specified expressions
-            //       (converting the FnUpdate into `IntFunction` or returning it directly)?
-            panic!(
-                "Cannot extract function for {variable} from model, it has a fully specified update."
-            )
+            UpdateFunctionDefinition::FullySpecified(expression) => {
+                let var_data = &self.problem[variable];
+                let arg_signatures = var_data
+                    .regulators_iter()
+                    .map(|var| (var, self.problem[var].ast_type()))
+                    .collect::<Vec<_>>();
+                IntFunction::from_update_function(expression, &arg_signatures)
+            }
+        };
+
+        for (i, reg) in self.problem[variable].regulators.iter().enumerate() {
+            function.clamp_argument(i, self.problem[*reg].domain);
         }
+        function.drop_default_output_level();
+        function.remove_duplicates();
+        Ok(function)
     }
 
     /// Decode the inferred Boolean network.
@@ -472,16 +413,10 @@ impl<SOLVER: AbstractMonotoneSolver + 'static> InferenceProblemEncoder<SOLVER> {
         let mut bn = BooleanNetwork::new(rg);
         for var in self.problem.variables() {
             let var_data = &self.problem[var];
-            // Either return the original fully specified update expression, or decode
-            // it from the model.
-            let update_function = if let Some(update_expr) = var_data.update_expr() {
-                update_expr.clone()
-            } else {
-                let function = self.decode_update_function(var, solver, model)?;
-                let regulators = Vec::from_iter(var_data.regulators.iter().cloned());
-                function.as_update_function(&regulators)?
-            };
-            bn.set_update_function(var, Some(update_function))
+            let function = self.decode_update_function(var, solver, model)?;
+            let regulators = Vec::from_iter(var_data.regulators.iter().cloned());
+            let function = function.as_update_function(&regulators)?;
+            bn.set_update_function(var, Some(function))
                 .map_err(|e| anyhow!(e))?;
         }
 

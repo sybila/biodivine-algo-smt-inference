@@ -2,8 +2,14 @@ use crate::bn_inference::constraints::{check_regulator_exists, check_variable_ex
 use crate::bn_inference::{InferenceConstraint, InferenceProblem, InferenceProblemEncoder};
 use crate::smt_solver::AbstractBoundedIntSolver;
 use crate::smt_solver::typed_ast::AstType;
+use anyhow::anyhow;
+use biodivine_algo_smt_inference::bn_inference::UpdateFunctionDefinition;
+use biodivine_algo_smt_inference::smt_solver::typed_ast::TypedAst;
 use biodivine_lib_param_bn::{RegulatoryGraph, VariableId};
 use log::info;
+use std::collections::HashMap;
+use z3::SatResult;
+use z3::ast::Bool;
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct RegulatorIsEssential {
@@ -45,6 +51,62 @@ impl<SOLVER: AbstractBoundedIntSolver + 'static> InferenceConstraint<SOLVER>
             self.regulator, self.target
         );
         let target_data = &encoder.problem[self.target];
+
+        if let UpdateFunctionDefinition::FullySpecified(expression) =
+            encoder.update_function(self.target)
+        {
+            // If the function is fully specified, execute a completely separate solver
+            // query to verify that essentiality holds. Under normal circumstances, this
+            // query should be very simple to check and should not cause any
+            // major performance issues. Subsequently, there is no need to add additional
+            // assertions to the main query.
+
+            // Note (1): If the regulators are ints, we consider them true iff they are non-zero.
+            // Consequently, we can simply treat them as Boolean when performing this extra
+            // solver check, because any non-zero value will produce the same truth value
+            // in our fully specified expression.
+
+            // Note (2): Technically, this check is not necessary. The property could be
+            // embedded into the main solver query. However, this (a) simplifies the main query
+            // when possible and (b) makes the error path consistent with monotonicity errors,
+            // failing during encoding if the fully specified expression is inconsistent.
+
+            let arg_prefix = "fully_specified_arg";
+
+            let mut args = target_data
+                .regulators_iter()
+                .map(|reg| (reg, Bool::fresh_const(arg_prefix)))
+                .collect::<HashMap<_, _>>();
+
+            args.insert(self.regulator, Bool::from_bool(false));
+            let low = TypedAst::from_fn_update(expression, &args);
+
+            args.insert(self.regulator, Bool::from_bool(true));
+            let high = TypedAst::from_fn_update(expression, &args);
+
+            let assertion = low.eq(&high)?.not();
+
+            // Make a new solver, add the assertion, and check that it is satisfiable,
+            // i.e., there is an input where flipping the regulator causes a change in output.
+            let solver = z3::Solver::new();
+            solver.assert(assertion);
+
+            return match solver.check() {
+                SatResult::Sat => Ok(()),
+                SatResult::Unknown => {
+                    unreachable!("Essentiality of fully specified expression is always decidable.")
+                }
+                SatResult::Unsat => Err(anyhow!(
+                    "Essentiality mismatch for regulator `{}` in `{}`",
+                    self.regulator,
+                    expression
+                )),
+            };
+        }
+
+        // If the function is uninterpreted, build a general query that will be added
+        // to the inference constraints.
+
         let regulator_data = &encoder.problem[self.regulator];
         let argument_index = encoder.problem[self.target]
             .regulator_index(self.regulator)

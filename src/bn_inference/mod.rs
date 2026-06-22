@@ -9,7 +9,13 @@ pub use inference_constraint::DynInferenceConstraint;
 pub use inference_constraint::InferenceConstraint;
 pub use inference_constraint::SimpleInferenceConstraint;
 
+mod update_function_definition;
+pub use update_function_definition::UpdateFunctionDefinition;
+
 pub mod constraints;
 
 mod inference_solver_iterator;
 pub use inference_solver_iterator::{BlockingStrategy, InferenceSolverIterator};
+
+#[cfg(test)]
+mod integration_tests;

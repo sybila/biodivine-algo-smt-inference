@@ -4,9 +4,10 @@ use crate::smt_solver::Monotonicity::Positive;
 use crate::smt_solver::typed_ast::AstType;
 use Monotonicity::Negative;
 use anyhow::anyhow;
-use biodivine_lib_param_bn::{FnUpdate, VariableId};
+use biodivine_lib_bdd::{Bdd, BddVariable, BddVariableSet};
+use biodivine_lib_param_bn::{BinaryOp, FnUpdate, VariableId};
 use itertools::Itertools;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::{Display, Formatter};
 
 /// A simple struct that represents an "integer function" by listing a disjunction
@@ -142,6 +143,93 @@ impl IntFunction {
             .collect::<Vec<_>>();
 
         Ok(FnUpdate::mk_disjunction(&clauses))
+    }
+
+    /// Create a [`IntFunction`] based on the given fully specified [`FnUpdate`]. Because
+    /// [`FnUpdate`] does not have explicitly ordered arguments (or argument types), argument
+    /// signatures must be also provided. The output of the function itself is always Boolean.
+    ///
+    pub fn from_update_function(
+        expression: &FnUpdate,
+        arg_signatures: &[(VariableId, AstType)],
+    ) -> Self {
+        // **First step:** Convert the expression into DNF via a BDD.
+
+        // The BDD variables correspond exactly to the function arguments, given
+        // by the `arg_signatures` list.
+
+        let arg_count =
+            u16::try_from(arg_signatures.len()).expect("Argument count must fit into `u16`.");
+        let bdd_vars = BddVariableSet::new_anonymous(arg_count);
+
+        // Each `VariableId` maps to an argument index given by `arg_signatures`:
+        let bdd_var_map = arg_signatures
+            .iter()
+            .enumerate()
+            .map(|(id, (var, _))| (*var, id))
+            .collect::<HashMap<_, _>>();
+
+        fn build(
+            expression: &FnUpdate,
+            bdd_vars: &BddVariableSet,
+            bdd_var_map: &HashMap<VariableId, usize>,
+        ) -> Bdd {
+            match expression {
+                FnUpdate::Const(value) => {
+                    if *value {
+                        bdd_vars.mk_true()
+                    } else {
+                        bdd_vars.mk_false()
+                    }
+                }
+                FnUpdate::Var(var) => {
+                    let bdd_var = bdd_var_map
+                        .get(var)
+                        .unwrap_or_else(|| panic!("Missing signature for `{var}`."));
+                    bdd_vars.mk_var(BddVariable::from_index(*bdd_var))
+                }
+                FnUpdate::Param(_, _) => panic!("Expression must not contain parameters."),
+                FnUpdate::Not(inner) => build(inner, bdd_vars, bdd_var_map).not(),
+                FnUpdate::Binary(op, left, right) => {
+                    let left = build(left, bdd_vars, bdd_var_map);
+                    let right = build(right, bdd_vars, bdd_var_map);
+                    match op {
+                        BinaryOp::And => left.and(&right),
+                        BinaryOp::Or => left.or(&right),
+                        BinaryOp::Xor => left.xor(&right),
+                        BinaryOp::Iff => left.iff(&right),
+                        BinaryOp::Imp => left.imp(&right),
+                    }
+                }
+            }
+        }
+
+        let bdd = build(expression, &bdd_vars, &bdd_var_map);
+        let dnf = bdd.to_optimized_dnf();
+
+        // **Second step:** Convert the DNF into `IntFunction` terms.
+
+        let mut term_list = Vec::new();
+        for clause in dnf {
+            let clause = clause
+                .to_values()
+                .into_iter()
+                .map(|(bdd_var, value)| {
+                    if value {
+                        IntAtom::ge(bdd_var.to_index(), 1)
+                    } else {
+                        IntAtom::le(bdd_var.to_index(), 0)
+                    }
+                })
+                .collect::<Vec<_>>();
+            term_list.push(clause);
+        }
+
+        let args = arg_signatures.iter().map(|(_, b)| *b).collect::<Vec<_>>();
+        IntFunction {
+            signature: (args, AstType::Bool),
+            terms: BTreeMap::from_iter([(1, term_list)]),
+        }
     }
 }
 

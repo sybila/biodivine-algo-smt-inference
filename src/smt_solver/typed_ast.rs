@@ -145,7 +145,7 @@ impl TypedAst {
     pub fn as_bool(&self) -> Option<&Bool> {
         match self {
             TypedAst::Int(_) => None,
-            TypedAst::Bool(x) => Some(x),
+            TypedAst::Bool(value) => Some(value),
         }
     }
 
@@ -211,56 +211,44 @@ impl TypedAst {
         }
     }
 
-    /// Recursively transform fully specified `FnUpdate` into a Boolean `TypedAst`
-    /// expression with all variables substituted into `Bool` AST nodes according
+    /// Transform fully specified [`FnUpdate`] into a Boolean [`TypedAst`] expression
+    /// with all variables substituted into [`Bool`] AST nodes according
     /// to the `substitution_map`.
     ///
     /// # Panics
     ///
-    /// The method panics if any parameter is encountered in the provided function or
-    /// if some variable is missing from the `substitution_map`.
+    /// The method panics if the given function contains parameters or if some variables
+    /// are missing from the `substitution_map`.
     pub fn from_fn_update(
         fn_update: &FnUpdate,
         substitution_map: &HashMap<VariableId, Bool>,
     ) -> TypedAst {
-        let inner = Self::from_fn_update_rec(fn_update, substitution_map);
-        Self::from(inner)
-    }
-
-    /// Recursively transform fully specified `FnUpdate` into a z3 `Bool` expression,
-    /// with all variables substituted using provided z3 `Bool` AST nodes.
-    ///
-    /// # Panics
-    ///
-    /// The method panics if any parameter is encountered in the provided function or
-    /// if some variable is missing from the `subst_map`.
-    fn from_fn_update_rec(fn_update: &FnUpdate, subst_map: &HashMap<VariableId, Bool>) -> Bool {
-        match fn_update {
-            FnUpdate::Const(value) => Bool::from_bool(*value),
-            FnUpdate::Var(v_id) => subst_map.get(v_id).cloned().unwrap_or_else(|| {
-                panic!("All variables must be present in the substitution map.")
-            }),
-            FnUpdate::Not(inner) => {
-                let inner_transformed = Self::from_fn_update_rec(inner, subst_map);
-                inner_transformed.not()
-            }
-            FnUpdate::Binary(op, l, r) => {
-                let l_transformed = Self::from_fn_update_rec(l, subst_map);
-                let r_transformed = Self::from_fn_update_rec(r, subst_map);
-                match op {
-                    BinaryOp::And => Bool::and(&[l_transformed, r_transformed]),
-                    BinaryOp::Or => Bool::or(&[l_transformed, r_transformed]),
-                    BinaryOp::Imp => l_transformed.implies(r_transformed),
-                    BinaryOp::Iff => l_transformed.iff(r_transformed),
-                    BinaryOp::Xor => l_transformed.xor(r_transformed),
+        fn build(fn_update: &FnUpdate, map: &HashMap<VariableId, Bool>) -> Bool {
+            match fn_update {
+                FnUpdate::Const(value) => Bool::from_bool(*value),
+                FnUpdate::Var(id) => map
+                    .get(id)
+                    .unwrap_or_else(|| panic!("Variable `{id}` not present in `substitution_map`."))
+                    .clone(),
+                FnUpdate::Param(_, _) => {
+                    panic!("`TypedAst::from_fn_update` does not support parameters.")
+                }
+                FnUpdate::Not(inner) => build(inner, map).not(),
+                FnUpdate::Binary(op, left, right) => {
+                    let left = build(left, map);
+                    let right = build(right, map);
+                    match op {
+                        BinaryOp::And => Bool::and(&[left, right]),
+                        BinaryOp::Or => Bool::or(&[left, right]),
+                        BinaryOp::Xor => left.xor(right),
+                        BinaryOp::Iff => left.iff(right),
+                        BinaryOp::Imp => left.implies(right),
+                    }
                 }
             }
-            FnUpdate::Param(..) => {
-                panic!(
-                    "Update function being transformed to TypedAst cannot contain any parameters."
-                )
-            }
         }
+
+        Self::from(build(fn_update, substitution_map))
     }
 }
 

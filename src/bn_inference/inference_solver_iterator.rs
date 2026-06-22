@@ -32,7 +32,7 @@ impl BlockingStrategy {
             }
             BlockingStrategy::FunctionPoints(Some(var)) => {
                 if let Some(var_id) = problem.find_variable(var) {
-                    if problem[var_id].has_update_expr() {
+                    if problem[var_id].has_update_expression() {
                         Err(anyhow!(
                             "Can not iterate over functions for variable {var}, its function is fully specified."
                         ))
@@ -167,7 +167,8 @@ impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceSolverIterator<'a, S
             if print_functions {
                 println!("= Function interpretations =");
                 for var in self.encoder.problem.variables() {
-                    if let Some(update_expr) = self.encoder.update_function(var).as_fn_update() {
+                    if let Some(update_expr) = self.encoder.update_function(var).as_uninterpreted()
+                    {
                         println!(
                             "> Function expression {} (fully spec)",
                             self.encoder.problem.get_variable(var).unwrap().name
@@ -217,7 +218,7 @@ impl<'a, SOLVER: AbstractMonotoneSolver + 'static> InferenceSolverIterator<'a, S
                             // We can safely unwrap here, as this had to be checked by [BlockingStrategy::validate]
                             self.encoder
                                 .update_function(v_id)
-                                .as_func_decl()
+                                .as_uninterpreted()
                                 .unwrap()
                                 .name()
                         });
