@@ -28,7 +28,7 @@ pub fn extract_function_applications(fml: &Bool) -> LinkedHashSet<Dynamic> {
 
         // Check if the expression is a non-trivial uninterpreted function application, and if so,
         // save it.
-        if expr.is_app() && expr.decl().kind() == DeclKind::UNINTERPRETED {
+        if expr.is_app() && expr.decl().kind() == DeclKind::Uninterpreted {
             results.insert(expr);
         }
     }
@@ -57,7 +57,7 @@ pub fn extract_int_functions(fml: &Bool) -> LinkedHashSet<Int> {
 
         // Check if the expression is an uninterpreted function application and has the type `Int`:
         if expr.is_app()
-            && expr.decl().kind() == DeclKind::UNINTERPRETED
+            && expr.decl().kind() == DeclKind::Uninterpreted
             && let Some(expr) = expr.as_int()
         {
             results.insert(expr);
