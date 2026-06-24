@@ -60,18 +60,19 @@ impl FunctionMonotonicityData {
         );
         assert_eq!(app1.as_dyn_ref().decl().name(), self.name);
 
-        let app1_args = app1.as_dyn_ref().children();
-        let app2_args = app2.as_dyn_ref().children();
+        let app1_args = app1
+            .typed_children()
+            .expect("Correctness violation: Invalid argument types.");
+        let app2_args = app2
+            .typed_children()
+            .expect("Correctness violation: Invalid argument types.");
 
         let assumptions = app1_args
             .into_iter()
             .zip(app2_args)
-            .zip(self.signature.0.iter())
             .enumerate()
-            .filter(|(_, ((arg1, arg2), _))| *arg1 != *arg2)
-            .map(|(i, ((arg1, arg2), tt))| {
-                let arg1 = TypedAst::cast_dynamic(*tt, arg1);
-                let arg2 = TypedAst::cast_dynamic(*tt, arg2);
+            .filter(|(_, (arg1, arg2))| *arg1 != *arg2)
+            .map(|(i, (arg1, arg2))| {
                 match self.arguments.get(&i) {
                     Some(Monotonicity::Positive) => arg1.le(&arg2), // arg1 <= arg2
                     Some(Monotonicity::Negative) => arg2.le(&arg1), // arg1 >= arg2
@@ -166,8 +167,7 @@ impl FunctionMonotonicityData {
         let mut table: BTreeMap<u32, BTreeMap<Vec<u32>, Vec<TypedAst>>> = BTreeMap::new();
 
         for app in self.occurrences.iter() {
-            let dynamic = Dynamic::from_ast(app.as_dyn_ref());
-            let (args, output) = model_eval_int_function(&dynamic, model);
+            let (args, output) = model_eval_int_function(app, model);
             let output_grouped_rows = table.entry(output).or_default();
             let row_applications = output_grouped_rows.entry(args).or_default();
             row_applications.push(app.clone());

@@ -3,11 +3,11 @@ use biodivine_lib_param_bn::{BinaryOp, FnUpdate, VariableId};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use z3::ast::{Ast, Bool, Dynamic, Int};
-use z3::{SortKind, Symbol};
+use z3::{Model, SortKind, Symbol};
 
 /// Analogous to [`SortKind`] but only admits types that are currently supported
 /// by our solver implementations.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum AstType {
     Int,
     Bool,
@@ -158,6 +158,48 @@ impl TypedAst {
 
     pub fn sort_kind(&self) -> SortKind {
         self.ast_type().into()
+    }
+
+    /// Evaluate this [`TypedAst`] using the given [`Model`]. The result will have
+    /// the same [`AstType`].
+    ///
+    /// The function can fail if the AST is not well sorted or contains quantifiers.
+    pub fn eval_in(&self, model: &Model) -> Option<TypedAst> {
+        match self {
+            TypedAst::Int(expr) => model.eval(expr, true).map(TypedAst::Int),
+            TypedAst::Bool(expr) => model.eval(expr, true).map(TypedAst::Bool),
+        }
+    }
+
+    /// Convert this [`TypedAst`] to an integer value assuming the AST is a `Bool` or an `Int`
+    /// constant (as is typical, `true` and `false` convert to `1` and `0`).
+    ///
+    /// Note that the function also returns `None` if the value is a constant, but does not
+    /// fit into `u32`.
+    pub fn as_value(&self) -> Option<u32> {
+        match self {
+            TypedAst::Int(expr) => expr.as_u64().and_then(|it| u32::try_from(it).ok()),
+            TypedAst::Bool(expr) => expr.as_bool().map(u32::from),
+        }
+    }
+
+    /// Evaluate this [`TypedAst`] in the given [`Model`] and convert the result into
+    /// an integer constant.
+    ///
+    /// Fails if the AST cannot be evaluated (e.g., contains quantifiers) or if it does
+    /// not evaluate to a constant value.
+    pub fn eval_as_constant(&self, model: &Model) -> Option<u32> {
+        self.eval_in(model).and_then(|it| it.as_value())
+    }
+
+    /// Extract child expressions and convert them to [`TypedAst`]. Returns `None` if
+    /// any child is not `Bool` or `Int`.
+    pub fn typed_children(&self) -> Option<Vec<TypedAst>> {
+        let mut result = Vec::new();
+        for child in self.as_dyn_ref().children() {
+            result.push(TypedAst::try_from(child).ok()?);
+        }
+        Some(result)
     }
 
     /// Produce a [`Bool`] expression that is equivalent to `self <= other`.

@@ -1,16 +1,15 @@
 use crate::bn_inference::InferenceProblem;
 use crate::bn_inference::UpdateFunctionDefinition;
 use crate::bn_inference::constraints::ValueComparison;
-use crate::smt_solver::typed_ast::{AstType, MapDynAst, TypedAst};
+use crate::smt_solver::typed_ast::{MapDynAst, TypedAst};
 use crate::smt_solver::{
-    AbstractBoundedIntSolver, AbstractMonotoneSolver, AbstractSolver, IntFunction, model_eval_int,
-    model_substitute_args_int_function,
+    AbstractBoundedIntSolver, AbstractMonotoneSolver, AbstractSolver, IntFunction,
 };
 use anyhow::anyhow;
 use biodivine_lib_param_bn::{BooleanNetwork, Regulation, RegulatoryGraph, VariableId};
 use log::info;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use z3::ast::{Bool, Dynamic, Int};
+use z3::ast::{Bool, Int};
 use z3::{AstKind, Model};
 
 /// A static collection of SMT formulas and declarations that are collectively used to
@@ -176,7 +175,7 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
     ///
     /// If the number of arguments or argument types do not match what is expected for
     /// the update function, or if the given variable does not exist at all.
-    pub fn mk_update_function_call(&self, variable: VariableId, args: &[&TypedAst]) -> TypedAst {
+    pub fn mk_update_function_call(&self, variable: VariableId, args: &[TypedAst]) -> TypedAst {
         let function = self.update_function(variable);
 
         // Check that the type is correct.
@@ -233,111 +232,12 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
         atoms
             .iter()
             .map(|(var, ast)| {
-                let eval = model_eval_int(&Dynamic::from_ast(ast.as_dyn_ref()), model);
+                let eval = ast
+                    .eval_as_constant(model)
+                    .expect("Correctness violation: AST does not evaluate to a constant.");
                 (*var, eval)
             })
             .collect()
-    }
-
-    /// Generates a formula to block the current assignment to SMT variables encoding either
-    /// the specified `state` or the combination of all declared states. If `network_variable` is
-    /// specified, only SMT variables representing values assigned to this network variable are
-    /// considered.
-    ///
-    /// Asserting this ensures that in the next model, at least one of these SMT state variables
-    /// must evaluate to a different value.
-    pub fn generate_state_valuation_blocker(
-        &self,
-        model: &Model,
-        blocked_state: Option<String>,
-        blocked_bn_variable: Option<VariableId>,
-    ) -> Result<Bool, anyhow::Error> {
-        let mut eq_atoms: Vec<Bool> = Vec::new();
-
-        // For each state, extract the SMT variable values and create equalities
-        for (state_name, state_map) in &self.state_atoms {
-            if let Some(target_name) = &blocked_state
-                && state_name != target_name
-            {
-                continue;
-            }
-
-            for (bn_var, var_atom) in state_map {
-                if let Some(target_bn_var) = &blocked_bn_variable
-                    && bn_var != target_bn_var
-                {
-                    continue;
-                }
-
-                let dynamic = Dynamic::from_ast(var_atom.as_dyn_ref());
-                let model_value = model_eval_int(&dynamic, model) as u64;
-                let ast_model_value = match var_atom.ast_type() {
-                    AstType::Int => TypedAst::from(Int::from_u64(model_value)),
-                    AstType::Bool => {
-                        assert!(model_value <= 1);
-                        TypedAst::from(Bool::from_bool(model_value == 1))
-                    }
-                };
-                eq_atoms.push(var_atom.eq(&ast_model_value)?);
-            }
-        }
-
-        if eq_atoms.is_empty() {
-            return Err(anyhow!("No state variables to block".to_string()));
-        }
-
-        // Create conjunction of all equalities matching the current model
-        // Negate the conjunction so that next model must differ in at least one value
-        let constraint = Bool::and(&eq_atoms.iter().collect::<Vec<_>>());
-        Ok(constraint.not())
-    }
-
-    /// Generates a formula to block the current interpretation of either the specified
-    /// `function` or all functions combined.
-    ///
-    /// The constraint is built using the specific function points gathered by evaluating the
-    /// calls in `original_fn_calls`. This ensures that in the next model, at least one of
-    /// these points must evaluate to a different value. This can also result in blocking
-    /// multiple interpretations at once (if they behave the same on relevant function points).
-    ///
-    /// TODO: double check if this blocking of function points works well with essentiality
-    ///       constraints and our monotonization process.
-    pub fn generate_function_points_blocker(
-        &self,
-        model: &Model,
-        function: Option<String>,
-        original_fn_calls: &BTreeMap<String, Vec<Dynamic>>,
-    ) -> Result<Bool, anyhow::Error> {
-        let mut eq_atoms: Vec<Bool> = Vec::new();
-
-        // Evaluate and substitute arguments for each function occurrence to create concrete
-        // calls (e.g., `f(0,0) = model_value`) for all model-defined function table rows.
-        for (fn_name, unique_fn_calls) in original_fn_calls {
-            for func_call in unique_fn_calls {
-                // If only a single function is specified, skip the rest
-                if let Some(target_name) = &function
-                    && fn_name != target_name
-                {
-                    continue;
-                }
-
-                let subst_fn_call = model_substitute_args_int_function(func_call, model);
-                let func_val = model.eval(func_call, true).expect("Cannot evaluate.");
-
-                let subst_fn_call_ast = TypedAst::try_from(subst_fn_call.clone()).unwrap();
-                let func_val_ast = TypedAst::try_from(func_val.clone()).unwrap();
-                eq_atoms.push(subst_fn_call_ast.eq(&func_val_ast)?);
-            }
-        }
-
-        if eq_atoms.is_empty() {
-            return Err(anyhow!("No function rows to block".to_string()));
-        }
-
-        // Create conjunction of all equalities matching the current model
-        // Negate the conjunction so that next model must differ in at least one point
-        let constraint = Bool::and(&eq_atoms.iter().collect::<Vec<_>>());
-        Ok(constraint.not())
     }
 }
 

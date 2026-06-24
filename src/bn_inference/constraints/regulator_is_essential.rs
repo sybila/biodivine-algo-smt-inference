@@ -143,11 +143,9 @@ impl<SOLVER: AbstractBoundedIntSolver + 'static> InferenceConstraint<SOLVER>
 
             // Assert that `update(args[i=0]) != update(args[i=1]])`.
             args[argument_index] = AstType::Bool.new_value(0);
-            let call_args =
-                encoder.mk_update_function_call(self.target, &Vec::from_iter(args.iter()));
+            let call_args = encoder.mk_update_function_call(self.target, &args);
             args[argument_index] = AstType::Bool.new_value(1);
-            let call_args_prime =
-                encoder.mk_update_function_call(self.target, &Vec::from_iter(args.iter()));
+            let call_args_prime = encoder.mk_update_function_call(self.target, &args);
             solver.assert(&call_args.eq(&call_args_prime)?.not());
 
             return Ok(());
@@ -163,10 +161,9 @@ impl<SOLVER: AbstractBoundedIntSolver + 'static> InferenceConstraint<SOLVER>
         }
 
         // Assert that `update(args) != update(args[i=i_prime]])`.
-        let call_args = encoder.mk_update_function_call(self.target, &Vec::from_iter(args.iter()));
+        let call_args = encoder.mk_update_function_call(self.target, &args);
         args[argument_index] = arg_prime;
-        let call_args_prime =
-            encoder.mk_update_function_call(self.target, &Vec::from_iter(args.iter()));
+        let call_args_prime = encoder.mk_update_function_call(self.target, &args);
         solver.assert(&call_args.eq(&call_args_prime)?.not());
 
         Ok(())
