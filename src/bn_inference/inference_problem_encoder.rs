@@ -3,13 +3,13 @@ use crate::bn_inference::UpdateFunctionDefinition;
 use crate::bn_inference::constraints::ValueComparison;
 use crate::smt_solver::typed_ast::{MapDynAst, TypedAst};
 use crate::smt_solver::{
-    AbstractBoundedIntSolver, AbstractMonotoneSolver, AbstractSolver, IntFunction, model_eval_int,
+    AbstractBoundedIntSolver, AbstractMonotoneSolver, AbstractSolver, IntFunction,
 };
 use anyhow::anyhow;
 use biodivine_lib_param_bn::{BooleanNetwork, Regulation, RegulatoryGraph, VariableId};
 use log::info;
 use std::collections::{BTreeMap, HashMap};
-use z3::ast::{Bool, Dynamic, Int};
+use z3::ast::{Bool, Int};
 use z3::{AstKind, Model};
 
 /// A static collection of SMT formulas and declarations that are collectively used to
@@ -220,7 +220,9 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
         atoms
             .iter()
             .map(|(var, ast)| {
-                let eval = model_eval_int(&Dynamic::from_ast(ast.as_dyn_ref()), model);
+                let eval = ast
+                    .eval_as_constant(model)
+                    .expect("Correctness violation: AST does not evaluate to a constant.");
                 (*var, eval)
             })
             .collect()

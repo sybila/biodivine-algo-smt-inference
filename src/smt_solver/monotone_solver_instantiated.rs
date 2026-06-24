@@ -166,8 +166,7 @@ impl FunctionMonotonicityData {
         let mut table: BTreeMap<u32, BTreeMap<Vec<u32>, Vec<TypedAst>>> = BTreeMap::new();
 
         for app in self.occurrences.iter() {
-            let dynamic = Dynamic::from_ast(app.as_dyn_ref());
-            let (args, output) = model_eval_int_function(&dynamic, model);
+            let (args, output) = model_eval_int_function(app, model);
             let output_grouped_rows = table.entry(output).or_default();
             let row_applications = output_grouped_rows.entry(args).or_default();
             row_applications.push(app.clone());

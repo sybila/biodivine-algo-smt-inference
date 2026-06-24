@@ -1,4 +1,4 @@
-use crate::smt_solver::typed_ast::AstType;
+use crate::smt_solver::typed_ast::{AstType, TypedAst};
 use anyhow::anyhow;
 use linked_hash_set::LinkedHashSet;
 use std::collections::HashSet;
@@ -69,28 +69,27 @@ pub fn extract_function_type_signature(
     Ok((args, out))
 }
 
-/// Evaluate a [`Dynamic`] expression in the given [`Model`], assuming the expression is
-/// either an `Int` or a `Bool`. Subsequently cast the result to `u32`.
-pub fn model_eval_int(expr: &Dynamic, model: &Model) -> u32 {
-    let result = model.eval(expr, true).expect("Cannot evaluate.");
-    if let Some(value) = result.as_bool() {
-        u32::from(value.as_bool().unwrap())
-    } else if let Some(value) = result.as_int() {
-        u32::try_from(value.as_u64().unwrap()).unwrap()
-    } else {
-        panic!("Function did not evaluate to bool/number.")
-    }
-}
-
-/// Assume the given expression is an Integer of Boolean uninterpreted function. Evaluate
-/// its arguments and the function itself.
-pub fn model_eval_int_function(expr: &Dynamic, model: &Model) -> (Vec<u32>, u32) {
+/// Assume the given expression is a function application with `Int`/`Bool` arguments.
+/// Evaluate the arguments of this function application and the function itself.
+///
+/// # Panics
+///
+/// Fails if the arguments of the expression are not correctly typed or if they do not
+/// evaluate to constant values.
+pub fn model_eval_int_function(expr: &TypedAst, model: &Model) -> (Vec<u32>, u32) {
     let args = expr
-        .children()
+        .typed_children()
+        .expect("Precondition violation: Invalid child expressions.")
         .iter()
-        .map(|child| model_eval_int(child, model))
+        .map(|child| {
+            child
+                .eval_as_constant(model)
+                .expect("Precondition violation: Argument AST does not evaluate to a constant.")
+        })
         .collect::<Vec<_>>();
 
-    let output = model_eval_int(expr, model);
+    let output = expr
+        .eval_as_constant(model)
+        .expect("Precondition violation: AST does not evaluate to a constant.");
     (args, output)
 }

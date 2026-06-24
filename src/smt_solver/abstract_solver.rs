@@ -1,3 +1,4 @@
+use crate::smt_solver::typed_ast::TypedAst;
 use crate::smt_solver::{
     IntAtom, IntFunction, extract_function_applications, extract_function_type_signature,
     model_eval_int_function,
@@ -32,6 +33,7 @@ pub trait AbstractSolver {
                 if func_call.decl().name() != f.name() {
                     continue;
                 }
+                let func_call = TypedAst::try_from(func_call)?;
                 let (args, output) = model_eval_int_function(&func_call, model);
                 let args = args
                     .into_iter()
