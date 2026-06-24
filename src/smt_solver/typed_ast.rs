@@ -7,7 +7,7 @@ use z3::{SortKind, Symbol};
 
 /// Analogous to [`SortKind`] but only admits types that are currently supported
 /// by our solver implementations.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum AstType {
     Int,
     Bool,
