@@ -148,7 +148,7 @@ fn main() -> Result<(), anyhow::Error> {
                 "Setting max. value of {name} with {targets} targets to {}.",
                 targets - 1
             );
-            targets as u32
+            u32::try_from(targets)?
         } else {
             max_value
         };
@@ -214,8 +214,8 @@ fn main() -> Result<(), anyhow::Error> {
     for cls in 0..priority_classes.len() {
         println!(
             "Priority class `{cls}` penalty bounds: [{:?}, {:?}]",
-            solver.get_lower(cls as u32),
-            solver.get_upper(cls as u32),
+            solver.get_lower(u32::try_from(cls)?),
+            solver.get_upper(u32::try_from(cls)?),
         );
     }
 

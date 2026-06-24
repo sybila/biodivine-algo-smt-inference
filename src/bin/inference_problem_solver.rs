@@ -95,6 +95,9 @@ fn main() -> Result<(), anyhow::Error> {
     // This is a legacy way to read constraints that will be removed in the future,
     // but for now we keep it to ensure backwards compatibility.
     let mut observations = BTreeMap::new();
+
+    // Here, iteration is safe because we are inserting into a sorted map that will be used later.
+    #[allow(clippy::iter_over_hash_type)]
     if let Some(fix_node) = annotations.get_child(&["fix"]) {
         for (fp_id, fp_values) in fix_node.children() {
             let json_str = fp_values.value().expect("Missing annotation value");

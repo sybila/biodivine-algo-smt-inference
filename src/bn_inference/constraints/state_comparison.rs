@@ -1,7 +1,6 @@
 use crate::bn_inference::constraints::{ConstraintStrings, check_state_exists, sorted_map};
 use crate::bn_inference::{InferenceProblem, InferenceProblemEncoder, SimpleInferenceConstraint};
 use crate::smt_solver::AbstractSolver;
-use anyhow::anyhow;
 use biodivine_lib_param_bn::ModelAnnotation;
 use macros::InferenceConstraint;
 use z3::ast::Bool;
@@ -46,10 +45,7 @@ impl StateComparison {
         if let Some(equalities) = equalities {
             for (left_state, inner) in sorted_map(equalities.children()) {
                 if inner.children().is_empty() {
-                    return Err(anyhow!(
-                        "Malformed equality constraint for state `{}`.",
-                        left_state
-                    ));
+                    anyhow::bail!("Malformed equality constraint for state `{left_state}`.");
                 }
                 for (right_state, inner) in sorted_map(inner.children()) {
                     result.push((Self::new_equal(left_state, right_state), inner));
@@ -61,10 +57,7 @@ impl StateComparison {
         if let Some(inequalities) = inequalities {
             for (left_state, inner) in sorted_map(inequalities.children()) {
                 if inner.children().is_empty() {
-                    return Err(anyhow!(
-                        "Malformed inequality constraint for state `{}`.",
-                        left_state
-                    ));
+                    anyhow::bail!("Malformed inequality constraint for state `{left_state}`.");
                 }
                 for (right_state, inner) in sorted_map(inner.children()) {
                     result.push((Self::new_not_equal(left_state, right_state), inner));

@@ -7,7 +7,6 @@ use crate::smt_solver::typed_ast::{AstType, TypedAst};
 use crate::smt_solver::{
     AbstractMonotoneBoundedIntOptimizeSolver, AbstractMonotoneBoundedIntSolver,
 };
-use anyhow::anyhow;
 use biodivine_lib_param_bn::{
     BooleanNetwork, FnUpdate, ModelAnnotation, RegulatoryGraph, VariableId,
 };
@@ -101,23 +100,19 @@ impl VariableData {
     ///  - The expression uses admissible regulator variables.
     pub fn set_update_expression(&mut self, f: FnUpdate) -> Result<(), anyhow::Error> {
         if !self.is_boolean() {
-            return Err(anyhow!(
-                "Concrete update expression can only be applied to Boolean variables."
-            ));
+            anyhow::bail!("Concrete update expression can only be applied to Boolean variables.");
         }
 
         if !f.collect_parameters().is_empty() {
-            return Err(anyhow!(
-                "Invalid update expression: Can't contain explicit parameters."
-            ));
+            anyhow::bail!("Invalid update expression: Can't contain explicit parameters.");
         }
 
         for arg in f.collect_arguments() {
             if !self.regulators.contains(&arg) {
-                return Err(anyhow!(
+                anyhow::bail!(
                     "Invalid update expression: Variable `{arg:?}` is not a regulator of `{}`.",
                     self.name
-                ));
+                );
             }
         }
 
@@ -392,7 +387,7 @@ impl<SOLVER: AbstractMonotoneBoundedIntSolver + 'static> InferenceProblem<SOLVER
         {
             for name in declarations.lines() {
                 if !self.declare_state(name) {
-                    return Err(anyhow!("State `{name}` is declared more than once."));
+                    anyhow::bail!("State `{name}` is declared more than once.");
                 }
             }
         }
