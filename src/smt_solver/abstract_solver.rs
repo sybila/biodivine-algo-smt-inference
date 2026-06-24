@@ -33,7 +33,6 @@ pub trait AbstractSolver {
                 if func_call.decl().name() != f.name() {
                     continue;
                 }
-                // At this point, the function should be correctly typed.
                 let func_call = TypedAst::try_from(func_call)?;
                 let (args, output) = model_eval_int_function(&func_call, model);
                 let args = args

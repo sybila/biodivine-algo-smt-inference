@@ -13,7 +13,7 @@ use std::fmt::{Display, Formatter};
 /// A simple struct that represents an "integer function" by listing a disjunction
 /// of terms for each output level. Note that the lists of terms are not necessarily exclusive
 /// and the output is the highest that matches the input.
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Clone, Hash, PartialEq, Eq, Debug)]
 pub struct IntFunction {
     pub signature: (Vec<AstType>, AstType),
     pub terms: BTreeMap<u32, Vec<Vec<IntAtom>>>,
