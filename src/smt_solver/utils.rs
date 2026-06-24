@@ -43,31 +43,10 @@ pub fn extract_function_applications(fml: &Bool) -> LinkedHashSet<Dynamic> {
 ///
 /// Note that this also returns all state constants, not just update functions.
 pub fn extract_int_functions(fml: &Bool) -> LinkedHashSet<Int> {
-    let mut todo = vec![Dynamic::from_ast(fml)];
-    let mut results: LinkedHashSet<Int> = LinkedHashSet::new();
-    let mut seen: HashSet<Dynamic> = HashSet::new();
-
-    while let Some(expr) = todo.pop() {
-        // Same as `extract_function_applications`, we want to explore all child expressions.
-        if expr.is_app() {
-            for child in expr.children() {
-                if !seen.contains(&child) {
-                    seen.insert(child.clone());
-                    todo.push(child);
-                }
-            }
-        }
-
-        // Check if the expression is an uninterpreted function application and has the type `Int`:
-        if expr.is_app()
-            && expr.decl().kind() == DeclKind::Uninterpreted
-            && let Some(expr) = expr.as_int()
-        {
-            results.insert(expr);
-        }
-    }
-
-    results
+    extract_function_applications(fml)
+        .iter()
+        .filter_map(|it| it.as_int())
+        .collect()
 }
 
 /// Extract the type signature of the given `function`, assuming it only has [`AstType`] arguments
