@@ -49,7 +49,7 @@ impl<SOLVER: AbstractSolver + 'static> SimpleInferenceConstraint<SOLVER> for Sta
             let var_atom = encoder.state_atom(&self.state, var);
             let args = encoder.problem[var]
                 .regulators_iter()
-                .map(|regulator| encoder.state_atom(&self.state, regulator))
+                .map(|regulator| encoder.state_atom(&self.state, regulator).clone())
                 .collect::<Vec<_>>();
             let var_function_call = encoder.mk_update_function_call(var, &args);
             conjunction.push(var_atom.eq(&var_function_call)?);

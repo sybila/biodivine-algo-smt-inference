@@ -162,7 +162,7 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
     ///
     /// If the number of arguments or argument types do not match what is expected for
     /// the update function, or if the given variable does not exist at all.
-    pub fn mk_update_function_call(&self, variable: VariableId, args: &[&TypedAst]) -> TypedAst {
+    pub fn mk_update_function_call(&self, variable: VariableId, args: &[TypedAst]) -> TypedAst {
         // Check that the variable exists and has a function.
         let function = self.update_function(variable);
 

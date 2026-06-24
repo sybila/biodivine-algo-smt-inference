@@ -107,7 +107,7 @@ impl ComparedValue {
                 }
                 let args = encoder.problem[*variable]
                     .regulators_iter()
-                    .map(|regulator| encoder.state_atom(state, regulator))
+                    .map(|regulator| encoder.state_atom(state, regulator).clone())
                     .collect::<Vec<_>>();
                 Ok(encoder.mk_update_function_call(*variable, &args))
             }
