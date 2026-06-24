@@ -26,6 +26,7 @@ struct Arguments {
     limit: usize,
 }
 
+#[allow(clippy::iter_over_hash_type)]
 fn main() {
     let args = Arguments::parse();
 

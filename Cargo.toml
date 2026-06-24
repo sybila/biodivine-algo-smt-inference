@@ -3,6 +3,18 @@ name = "biodivine-algo-smt-inference"
 version = "0.1.0"
 edition = "2024"
 
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+# If anyone is iterating over a hash type, we want them to explicitly
+# disable the warning to track possible sources of non-determinism.
+iter_over_hash_type = "warn"
+# Warn about dangerous unchecked integer conversions.
+cast_possible_truncation = "warn"
+cast_possible_wrap = "warn"
+cast_sign_loss = "warn"
+
 [features]
 default = ["z3-gh-release"]
 
