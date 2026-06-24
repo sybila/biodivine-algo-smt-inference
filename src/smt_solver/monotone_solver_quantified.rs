@@ -3,7 +3,6 @@ use crate::smt_solver::{
     AbstractBoundedIntSolver, AbstractMonotoneSolver, AbstractOptimizeSolver, AbstractSolver,
     Monotonicity, extract_function_applications, extract_function_type_signature,
 };
-use anyhow::anyhow;
 use num_rational::BigRational;
 use std::collections::{BTreeMap, BTreeSet};
 use z3::ast::{Ast, Bool, Dynamic, forall_const};
@@ -76,11 +75,10 @@ impl<INNER: AbstractSolver> QuantifiedMonotoneSolver<INNER> {
         let (domain, range) = extract_function_type_signature(f)?;
 
         if i >= domain.len() {
-            return Err(anyhow!(
-                "Argument `{}` not valid for function with arity `{}`.",
-                i,
+            anyhow::bail!(
+                "Argument `{i}` not valid for function with arity `{}`.",
                 f.arity()
-            ));
+            );
         }
 
         // Quantified variables representing function arguments:
@@ -203,16 +201,16 @@ impl<INNER: AbstractSolver> QuantifiedMonotoneSolver<INNER> {
     ) -> Result<(), anyhow::Error> {
         let name = f.name();
         if self.has_asserted.contains_key(name.as_str()) {
-            return Err(anyhow!(
-                "Monotonicity constraints for `{name}` must be declared before all assertions using `{name}`."
-            ));
+            anyhow::bail!(
+                "Monotonicity of `{name}` must be declared before all assertions using `{name}`."
+            );
         }
 
         if i >= f.arity() {
-            return Err(anyhow!(
+            anyhow::bail!(
                 "Argument `{i}` not valid for function with arity `{}`.",
                 f.arity()
-            ));
+            );
         }
 
         self.function_info

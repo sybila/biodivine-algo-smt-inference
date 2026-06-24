@@ -98,12 +98,9 @@ impl ComparedValue {
             }
             ComparedValue::UpdateFunctionOutputInState(state, variable) => {
                 if my_type != other_type {
-                    return Err(anyhow!(
-                        "Invalid comparison: `{}` has type `{}`, but need to be `{}`.",
-                        self,
-                        my_type,
-                        other_type
-                    ));
+                    anyhow::bail!(
+                        "Invalid comparison: `{self}` has type `{my_type}`, but need to be `{other_type}`."
+                    );
                 }
                 let args = encoder.problem[*variable]
                     .regulators_iter()
@@ -268,9 +265,7 @@ impl ValueComparison {
                 let op = CmpOp::read_from_key(op)?;
                 for (left, inner) in sorted_map(inner.children()) {
                     if inner.children().is_empty() {
-                        return Err(anyhow!(
-                            "Malformed value comparison for `{op}` and `{left}`."
-                        ));
+                        anyhow::bail!("Malformed value comparison for `{op}` and `{left}`.");
                     }
                     for (right, inner) in sorted_map(inner.children()) {
                         let left = ComparedValue::read_from_key(left, psbn)?;

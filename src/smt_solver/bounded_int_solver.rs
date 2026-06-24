@@ -76,9 +76,7 @@ impl<SOLVER: AbstractSolver> AbstractBoundedIntSolver for BoundedIntSolver<SOLVE
             // Users should not add assertions about integer value. Currently, I am not aware
             // of any better way to identify whether `f` is an integer value or actual
             // uninterpreted function.
-            return Err(anyhow!(
-                "You seem to be asserting that a constant value is a bounded `Int`."
-            ));
+            anyhow::bail!("You seem to be asserting that a constant value is a bounded `Int`.");
         }
 
         // Check that this is not a duplicate declaration:

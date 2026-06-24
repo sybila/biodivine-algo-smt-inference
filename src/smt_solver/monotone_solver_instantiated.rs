@@ -4,7 +4,6 @@ use crate::smt_solver::{
     Monotonicity, extract_function_applications, extract_function_type_signature,
     model_eval_int_function,
 };
-use anyhow::anyhow;
 use linked_hash_set::LinkedHashSet;
 use log::{debug, info};
 use num_rational::BigRational;
@@ -255,16 +254,16 @@ impl<INNER: AbstractSolver> InstantiatedMonotoneSolver<INNER> {
     ) -> Result<(), anyhow::Error> {
         let name = f.name();
         if self.has_asserted.contains(&name) {
-            return Err(anyhow!(
-                "Monotonicity constraints for `{name}` must be declared before all assertions using `{name}`."
-            ));
+            anyhow::bail!(
+                "Monotonicity of `{name}` must be declared before all assertions using `{name}`."
+            );
         }
 
         if i >= f.arity() {
-            return Err(anyhow!(
+            anyhow::bail!(
                 "Argument `{i}` not valid for function with arity `{}`.",
                 f.arity()
-            ));
+            );
         }
 
         self.ensure_function_info(f)?

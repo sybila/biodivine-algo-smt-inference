@@ -3,7 +3,6 @@ use crate::smt_solver::Monotonicity;
 use crate::smt_solver::Monotonicity::Positive;
 use crate::smt_solver::typed_ast::AstType;
 use Monotonicity::Negative;
-use anyhow::anyhow;
 use biodivine_lib_bdd::{Bdd, BddVariable, BddVariableSet};
 use biodivine_lib_param_bn::{BinaryOp, FnUpdate, VariableId};
 use itertools::Itertools;
@@ -93,23 +92,19 @@ impl IntFunction {
     /// function is Boolean.
     pub fn as_update_function(&self, args: &[VariableId]) -> Result<FnUpdate, anyhow::Error> {
         if self.signature.1 != AstType::Bool {
-            return Err(anyhow!(
-                "Conversion to `FnUpdate` failed: the function is not boolean."
-            ));
+            anyhow::bail!("Conversion to `FnUpdate` failed: the function is not boolean.");
         }
         for arg in self.signature.0.iter() {
             if *arg != AstType::Bool {
-                return Err(anyhow!(
-                    "Conversion to `FnUpdate` failed: the function is not boolean."
-                ));
+                anyhow::bail!("Conversion to `FnUpdate` failed: the function is not boolean.");
             }
         }
         if args.len() != self.signature.0.len() {
-            return Err(anyhow!(
+            anyhow::bail!(
                 "Expected {} arguments but got {}.",
                 self.signature.0.len(),
                 args.len()
-            ));
+            );
         }
 
         let Some(clauses) = self.terms.get(&1) else {
