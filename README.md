@@ -95,15 +95,32 @@ The compared values need to be enclosed in backticks (i.e, \`). In general, all 
 
 Note that for the whole states, the only supported comparisons are `equal` and `not-equal`, as there are multiple partial orders that we could consider to implement the remaining comparisons.
 
-### Inference solver with iteration over multiple solutions
+### Enumeration of solutions
 
-> Work in progress: This feature is currently being tested.
+> WARNING: Enumeration of multiple solutions in the weighted solver is not supported, but is technically feasible
+> and will be coming in later versions. 
 
-You can use the `inference_problem_solver_iterative` binary to run the current version of the inference solver and iterate over multiple solutions. 
-Use the binary as: 
-```
-inference_problem_solver_iterative <INPUT_MODEL> --limit <N> --blocker <BLOCKING_STRATEGY>
-```
- - `limit` specifies the maximum number of solutions to iterate over
- - `blocker` specifies the blocking strategy. We offer two strategies for iterating solutions, either by blocking state assignments, or function interpretations. Use `state-valuations` or `state-valuations:VAR_NAME` to block valuations of SMT state variables (if `VAR_NAME` is specified, only block assignments corresponding to a selected BN variable). Use `function-points` or `function-points:VAR_NAME` to block the function interpretation (if `VAR_NAME` is specified, only block function corresponding to a selected BN variable). Default value is `state-valuations`.
- - Use `--help` flag to see more details on additional standard solver arguments.
+By default, the solver will report `0/1` to indicate that the problem is UNSAT/SAT (it can also report `?` if the
+solving process is interrupted). If you specify some `--print-*` argument, the respective part of the solution will
+be also printed (assuming the solution exists).
+
+If you want to enumerate more than one solution, use `--solutions=X` to indicate an upper limit. You can then
+use one or more `--projection=X` arguments to indicate that you only want the enumerated solutions to be unique
+with respect to some subset of the specification (specific variable in a state = `state/var`, all variables in
+a state = `state/*`, specific variable across all states = `*/var`, all state data = `*/*`, specific update function
+ = `$var`, all update functions = `$*`; don't forget to escape `$` if running from `bash`). The solver will
+still print everything that was requested, but only enforce uniqueness for the items indicated by `--projection`.
+
+**Important note on function enumeration:** Currently, the solver does not enumerate specific functions, but rather
+"classes of partial function specifications", such that all functions in a class are indistinguishable by the provided
+inference problem. Due to some technical limitations, the class is simply reported using one representative function.
+In the future, we want to provide a more rigorous way to print the whole class, not just one function from it.
+
+As an example, consider an inference problem that does not use function `f(x, y)` at all. Then, the solver will only
+report one "class of functions" (represented by `f(x, y) = false`), because from the point of view of the inference
+problem, it is irrelevant which `f` is chosen. Similarly, if the inference problem only requires that `f(1,1) = 1`,
+the solver will only report `f(x,y) = x & y` because all the other functions that satisfy the specification agree
+with `x & y` on the value of `f(1,1)`. In other words, multiple function classes are typically only reported when
+there are multiple different "sets of points" that the inference problem can enforce about `f`. For example, if
+the inference problem enforces `f(1,1) = 1` OR `f(0,0) = 1`, then there would be two function classes, one represented
+using `x & y` and the other represented by `!x & !y`.

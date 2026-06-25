@@ -1,6 +1,8 @@
 use crate::bn_inference::InferenceProblemIterator;
 use crate::bn_inference::constraints::StateIsFixedPoint;
-use biodivine_algo_smt_inference::bn_inference::constraints::ValueComparison;
+use biodivine_algo_smt_inference::bn_inference::constraints::{
+    CmpOp, ComparedValue, ValueComparison,
+};
 use biodivine_algo_smt_inference::bn_inference::integration_tests::build_test_solver;
 use biodivine_algo_smt_inference::bn_inference::{
     BlockingAtom, InferenceProblem, InferenceProblemEncoder,
@@ -139,6 +141,59 @@ fn iterate_monotone_function_and_inputs() -> Result<(), anyhow::Error> {
     // One fixed point for the other combinations:
     assert!(results.contains(&BTreeMap::from_iter([(a, 0), (b, 1), (out, 1)])));
     assert!(results.contains(&BTreeMap::from_iter([(a, 1), (b, 0), (out, 1)])));
+
+    Ok(())
+}
+
+#[test]
+fn iterate_partially_specified_function() -> Result<(), anyhow::Error> {
+    // This reports only one solution, because all the other solutions are in the same
+    // "partial specification class". Due to our function "completion" algorithm, the
+    // reported function will always be "&".
+
+    let psbn = BooleanNetwork::try_from(
+        r#"
+        a -?? out
+        b -?? out
+    "#,
+    )
+    .unwrap();
+
+    let a = psbn.as_graph().find_variable("a").unwrap();
+    let b = psbn.as_graph().find_variable("b").unwrap();
+    let out = psbn.as_graph().find_variable("out").unwrap();
+
+    let mut solver = build_test_solver();
+
+    let mut problem = InferenceProblem::from_partially_specified_network(&psbn)?;
+
+    // Assert that f_out(1,1) = 1
+    assert!(problem.declare_state("s"));
+    problem.assert_constraint(ValueComparison::variable_assignment("s", a, 1))?;
+    problem.assert_constraint(ValueComparison::variable_assignment("s", b, 1))?;
+    problem.assert_constraint(ValueComparison::variable_assignment("s", out, 1))?;
+    problem.assert_constraint(ValueComparison::new(
+        ComparedValue::UpdateFunctionOutputInState("s".to_string(), out),
+        CmpOp::Equal,
+        ComparedValue::Constant(1),
+    ))?;
+
+    let encoder = InferenceProblemEncoder::new(problem, &mut solver, true)?;
+    let mut iterator = InferenceProblemIterator::new(
+        &encoder,
+        solver,
+        &[BlockingAtom::FunctionPoints("out".to_string())],
+    )?;
+
+    let mut functions = Vec::new();
+    while let Some(model) = iterator.next() {
+        functions.push(encoder.decode_update_function(out, iterator.solver(), &model)?);
+    }
+
+    assert_eq!(functions.len(), 1);
+    let function = functions.into_iter().next().unwrap();
+    let (bdd_ctx, fun_bdd) = function.as_bdd();
+    assert_eq!(bdd_ctx.eval_expression_string("x_0 & x_1"), fun_bdd);
 
     Ok(())
 }
