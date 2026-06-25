@@ -3,7 +3,7 @@ use crate::smt_solver::Monotonicity;
 use crate::smt_solver::Monotonicity::Positive;
 use crate::smt_solver::typed_ast::AstType;
 use Monotonicity::Negative;
-use biodivine_lib_bdd::{Bdd, BddVariable, BddVariableSet};
+use biodivine_lib_bdd::{Bdd, BddPartialValuation, BddVariable, BddVariableSet};
 use biodivine_lib_param_bn::{BinaryOp, FnUpdate, VariableId};
 use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -139,6 +139,56 @@ impl IntFunction {
             .collect::<Vec<_>>();
 
         Ok(FnUpdate::mk_disjunction(&clauses))
+    }
+
+    /// Return true if the function is Boolean, meaning it returns a Bool and all of its
+    /// arguments are Bools.
+    pub fn is_boolean(&self) -> bool {
+        if self.signature.1 != AstType::Bool {
+            return false;
+        }
+        if self.signature.0.iter().any(|it| *it != AstType::Bool) {
+            return false;
+        }
+        true
+    }
+
+    /// Convert this [`IntFunction`] into a [`Bdd`] using anonymous variables matching the function
+    /// arity. The conversion only works if the function is Boolean (panics otherwise).
+    pub fn as_bdd(&self) -> (BddVariableSet, Bdd) {
+        if !self.is_boolean() {
+            panic!("Precondition violation: the function is not boolean.");
+        }
+
+        // Build BDD context:
+        let arity = u16::try_from(self.signature.0.len()).unwrap();
+        let bdd_ctx = BddVariableSet::new_anonymous(arity);
+
+        // Build the BDD from the current DNF representation:
+        let mut dnf = Vec::new();
+        if let Some(terms) = self.terms.get(&1) {
+            'terms: for term in terms {
+                let mut clause = BddPartialValuation::empty();
+                for atom in term.iter() {
+                    let bdd_var = BddVariable::from_index(atom.arg_index);
+                    match (atom.op, atom.val) {
+                        // `>= 1`, `== 1` are positive checks
+                        (GE, 1) | (EQ, 1) => clause[bdd_var] = Some(true),
+                        // `<= 0`, `== 0` are negative checks
+                        (LE, 0) | (EQ, 0) => clause[bdd_var] = Some(false),
+                        // `>= 0`, `<= 1`, `<= x[>1]` are tautologies
+                        (GE, 0) | (LE, 1) | (LE, _) => continue,
+                        // `>= x[>1]`, `== x[>1] is a contradiction (skip the whole term because it is UNSAT)
+                        (GE, _) | (EQ, _) => continue 'terms,
+                    }
+                }
+                dnf.push(clause);
+            }
+        }
+
+        // And convert it into a BDD:
+        let bdd = bdd_ctx.mk_dnf(&dnf);
+        (bdd_ctx, bdd)
     }
 
     /// Create a [`IntFunction`] based on the given fully specified [`FnUpdate`]. Because
