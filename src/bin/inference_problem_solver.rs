@@ -1,31 +1,40 @@
 use biodivine_algo_smt_inference::bn_inference::constraints::{StateIsFixedPoint, ValueComparison};
-use biodivine_algo_smt_inference::bn_inference::{InferenceProblem, InferenceProblemEncoder};
+use biodivine_algo_smt_inference::bn_inference::{
+    BlockingAtom, InferenceProblem, InferenceProblemEncoder, InferenceProblemIterator,
+};
 use biodivine_algo_smt_inference::smt_solver::{
-    AbstractSolver, BoundedIntSolver, DynMonotoneBoundedIntSolver, InstantiatedMonotoneSolver,
-    QuantifiedMonotoneSolver,
+    AbstractMonotoneSolver, AbstractSolver, BoundedIntSolver, DynMonotoneBoundedIntSolver,
+    InstantiatedMonotoneSolver, QuantifiedMonotoneSolver,
 };
 use biodivine_lib_param_bn::{BooleanNetwork, ModelAnnotation};
 use clap::Parser;
 use clap::builder::PossibleValuesParser;
 use log::{error, info};
 use std::collections::BTreeMap;
-use z3::{SatResult, set_global_param};
+use std::str::FromStr;
+use z3::{Model, SatResult, set_global_param};
+
+fn parse_blocking_atom(input: &str) -> Result<BlockingAtom, String> {
+    BlockingAtom::from_str(input).map_err(|err| err.to_string())
+}
 
 #[derive(Parser)]
-#[clap(about = "SMT benchmarking prototype for BN inference (single solution).")]
+#[clap(about = "SMT benchmarking prototype for BN inference.")]
 struct Arguments {
     /// Path to an AEON file with a PSBN model and fixed point annotations.
     model_path: String,
 
-    /// If specified, a satisfying BN is saved to this file (only supported for Boolean inference problems).
+    /// If specified, a satisfying BN is saved to this file (only supported for Boolean
+    /// inference problems!). When enumerating, solution index is appended before
+    /// the file extension (e.g., `.2.aeon`).
     #[clap(short, long)]
     output_path: Option<String>,
 
     /// Used SMT monotonicity encoding type.
-    #[clap(long, short, value_parser = PossibleValuesParser::new(["instantiated-eager", "instantiated-lazy", "quantified-individual", "quantified-merge"]), default_value = "instantiated-eager")]
+    #[clap(long, value_parser = PossibleValuesParser::new(["instantiated-eager", "instantiated-lazy", "quantified-individual", "quantified-merge"]), default_value = "instantiated-eager")]
     solver: String,
 
-    /// Automatically eliminates some simple Boolean universal quantifiers
+    /// Automatically eliminates some simple Boolean universal quantifiers.
     #[clap(long, default_value = "true")]
     boolean_quantifier_optimization: Option<bool>,
 
@@ -54,6 +63,71 @@ struct Arguments {
     /// Settings 'info', 'debug' and 'trace' also enable verbose logging within Z3.
     #[arg(long, short, num_args = 0..=1, default_missing_value = "info", require_equals = true)]
     verbose: Option<String>,
+
+    /// The number of solutions to enumerate. May not include all unique solutions (for functions
+    /// equivalent w.r.t. inference constraints, only one representative example is listed).
+    ///
+    /// If zero, only 0/1/? is printed to indicate UNSAT/SAT/INTERRUPTED.
+    #[clap(long = "solutions", default_value_t = 1)]
+    solutions: usize,
+
+    /// Blocking atoms used for solution projection during enumeration (e.g. `*/*` = all state data,
+    /// `state/*` = all data in one state, `*/var` = all variable data across states,
+    /// `state/var` = variable in state, `$var` = function of var).
+    #[clap(long, value_parser = parse_blocking_atom, default_values = ["*/*", "$*"])]
+    projection: Vec<BlockingAtom>,
+}
+
+fn print_solution_details<S: AbstractMonotoneSolver + 'static>(
+    encoder: &InferenceProblemEncoder<S>,
+    solver: &S,
+    model: &Model,
+    psbn: &BooleanNetwork,
+    args: &Arguments,
+    solution_index: usize,
+) -> Result<(), anyhow::Error> {
+    if solution_index > 0 {
+        // Only print the header if enumerating multiple solutions.
+        println!("=== Solution #{solution_index} ===");
+    }
+    if let Some(output_path) = &args.output_path {
+        let output_path = if solution_index > 0 {
+            output_path.replace(".aeon", &format!("{solution_index}.aeon"))
+        } else {
+            output_path.clone()
+        };
+
+        match encoder.decode_boolean_network(solver, model, true) {
+            Ok(bn) => {
+                std::fs::write(output_path, bn.to_string())?;
+            }
+            Err(err) => {
+                error!("Unable to decode Boolean network. {err}",);
+            }
+        }
+    }
+
+    if args.print_state_valuations {
+        println!("=== State table ===");
+        for state in encoder.problem.states() {
+            let decoded = encoder.decode_state(&state, model);
+            let named = decoded
+                .into_iter()
+                .map(|(a, b)| (psbn.get_variable_name(a), b))
+                .collect::<BTreeMap<_, _>>();
+            println!("State `{state}`: {:?}", named);
+        }
+    }
+
+    if args.print_update_rules {
+        for var in psbn.variables() {
+            let function = encoder.decode_update_function(var, solver, model)?;
+            println!("=== Function table {} ===", psbn.get_variable_name(var));
+            println!("{}", function);
+        }
+    }
+
+    Ok(())
 }
 
 fn main() -> Result<(), anyhow::Error> {
@@ -176,41 +250,43 @@ fn main() -> Result<(), anyhow::Error> {
     info!("Checking for solution...");
 
     let result = solver.check();
-
     info!("Has solution? {:?}", result);
 
     if result == SatResult::Sat {
-        let model = solver.get_model().unwrap();
+        if args.solutions == 1 {
+            // If only one solution is requested, we can just print it.
+            let model = solver.get_model().unwrap();
+            print_solution_details(&encoder, &solver, &model, &psbn, &args, 0)?;
+        } else if args.solutions > 1 {
+            // If multiple solutions are requested, we have to iterate:
+            info!("Enumeration projection: {:?}", args.projection);
 
-        if let Some(output_path) = args.output_path {
-            match encoder.decode_boolean_network(&solver, &model, true) {
-                Ok(bn) => {
-                    std::fs::write(output_path, bn.to_string())?;
-                }
-                Err(err) => {
-                    error!("Unable to decode boolean network. {err}",);
-                }
-            }
-        }
+            let mut iterator = InferenceProblemIterator::new(&encoder, solver, &args.projection)?;
+            let mut solution_count = 1;
 
-        if args.print_state_valuations {
-            println!("=== State table ===");
-            for state in encoder.problem.states() {
-                let decoded = encoder.decode_state(&state, &model);
-                let named = decoded
-                    .into_iter()
-                    .map(|(a, b)| (psbn.get_variable_name(a), b))
-                    .collect::<BTreeMap<_, _>>();
-                println!("State `{state}`: {:?}", named);
-            }
-        }
+            while solution_count <= args.solutions {
+                let Some(model) = iterator.next() else {
+                    break;
+                };
 
-        if args.print_update_rules {
-            for var in psbn.variables() {
-                let function = encoder.decode_update_function(var, &solver, &model)?;
-                println!("=== Function table {} ===", psbn.get_variable_name(var));
-                println!("{}", function);
+                info!("Found solution {solution_count}.");
+
+                print_solution_details(
+                    &encoder,
+                    iterator.solver(),
+                    &model,
+                    &psbn,
+                    &args,
+                    solution_count,
+                )?;
+
+                solution_count += 1;
             }
+
+            info!(
+                "Enumerated {solution_count} solution(s) (limit: {}).",
+                args.solutions
+            );
         }
     }
 

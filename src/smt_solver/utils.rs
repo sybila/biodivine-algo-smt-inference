@@ -49,6 +49,20 @@ pub fn extract_int_functions(fml: &Bool) -> LinkedHashSet<Int> {
         .collect()
 }
 
+/// Extract all usages of a specific uninterpreted function.
+///
+/// Due to API limitations, the functions are considered equal if they share the same name.
+pub fn extract_specific_function_applications(
+    fml: &Bool,
+    declaration: &FuncDecl,
+) -> LinkedHashSet<Dynamic> {
+    extract_function_applications(fml)
+        .into_iter()
+        // `FuncDecl` does not implement `Eq`, but this should be acceptable for now...
+        .filter(|it| it.decl().name() == declaration.name())
+        .collect()
+}
+
 /// Extract the type signature of the given `function`, assuming it only has [`AstType`] arguments
 /// and output.
 pub fn extract_function_type_signature(

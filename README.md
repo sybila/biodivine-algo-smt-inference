@@ -95,4 +95,32 @@ The compared values need to be enclosed in backticks (i.e, \`). In general, all 
 
 Note that for the whole states, the only supported comparisons are `equal` and `not-equal`, as there are multiple partial orders that we could consider to implement the remaining comparisons.
 
- > Soon an option to express state successors as a single constraint should be added as well.
+### Enumeration of solutions
+
+> WARNING: Enumeration of multiple solutions in the weighted solver is not supported, but is technically feasible
+> and will be coming in later versions. 
+
+By default, the solver will report `0/1` to indicate that the problem is UNSAT/SAT (it can also report `?` if the
+solving process is interrupted). If you specify some `--print-*` argument, the respective part of the solution will
+be also printed (assuming the solution exists).
+
+If you want to enumerate more than one solution, use `--solutions=X` to indicate an upper limit. You can then
+use one or more `--projection=X` arguments to indicate that you only want the enumerated solutions to be unique
+with respect to some subset of the specification (specific variable in a state = `state/var`, all variables in
+a state = `state/*`, specific variable across all states = `*/var`, all state data = `*/*`, specific update function
+ = `$var`, all update functions = `$*`; don't forget to escape `$` if running from `bash`). The solver will
+still print everything that was requested, but only enforce uniqueness for the items indicated by `--projection`.
+
+**Important note on function enumeration:** Currently, the solver does not enumerate specific functions, but rather
+"classes of partial function specifications", such that all functions in a class are indistinguishable by the provided
+inference problem. Due to some technical limitations, the class is simply reported using one representative function.
+In the future, we want to provide a more rigorous way to print the whole class, not just one function from it.
+
+As an example, consider an inference problem that does not use function `f(x, y)` at all. Then, the solver will only
+report one "class of functions" (represented by `f(x, y) = false`), because from the point of view of the inference
+problem, it is irrelevant which `f` is chosen. Similarly, if the inference problem only requires that `f(1,1) = 1`,
+the solver will only report `f(x,y) = x & y` because all the other functions that satisfy the specification agree
+with `x & y` on the value of `f(1,1)`. In other words, multiple function classes are typically only reported when
+there are multiple different "sets of points" that the inference problem can enforce about `f`. For example, if
+the inference problem enforces `f(1,1) = 1` OR `f(0,0) = 1`, then there would be two function classes, one represented
+using `x & y` and the other represented by `!x & !y`.

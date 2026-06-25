@@ -8,7 +8,7 @@ use crate::smt_solver::{
 use anyhow::anyhow;
 use biodivine_lib_param_bn::{BooleanNetwork, Regulation, RegulatoryGraph, VariableId};
 use log::info;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use z3::ast::{Bool, Int};
 use z3::{AstKind, Model};
 
@@ -143,6 +143,19 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
             .unwrap_or_else(|| panic!("Variable `{variable:?}` not found."))
     }
 
+    /// Retrieve a set of names of all fn declaration that are valid uninterpreted update
+    /// functions.
+    ///
+    /// This is useful since all defined SMT constants are by design uninterpreted functions,
+    /// and we need to distinguish them from actual update functions sometimes.
+    pub fn valid_update_fn_names(&self) -> HashSet<String> {
+        self.update_functions
+            .values()
+            .filter_map(|func| func.as_uninterpreted())
+            .map(|func| func.name())
+            .collect()
+    }
+
     /// Retrieve the atom encoding the value of a particular variable in the given `state`.
     pub fn state_atom(&self, state: &str, variable: VariableId) -> &TypedAst {
         let atoms = self
@@ -163,7 +176,6 @@ impl<SOLVER: AbstractSolver + 'static> InferenceProblemEncoder<SOLVER> {
     /// If the number of arguments or argument types do not match what is expected for
     /// the update function, or if the given variable does not exist at all.
     pub fn mk_update_function_call(&self, variable: VariableId, args: &[TypedAst]) -> TypedAst {
-        // Check that the variable exists and has a function.
         let function = self.update_function(variable);
 
         // Check that the type is correct.

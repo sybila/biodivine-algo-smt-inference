@@ -341,11 +341,62 @@ impl<SOLVER: AbstractMonotoneBoundedIntSolver + 'static> InferenceProblem<SOLVER
     ) -> Result<(), anyhow::Error> {
         for var in bn.variables() {
             if let Some(expression) = bn.get_update_function(var) {
+                // As a compatibility measure, we allow the network to also contain explicit
+                // parameters as long as (a) the whole expression is just the parameter;
+                // (b) the parameter is not used anywhere else; (c) it uses declared variable
+                // regulators as its arguments.
+                if Self::check_redundant_expression(var, expression, bn) {
+                    continue;
+                }
+
                 self[var].set_update_expression(expression.clone())?;
             }
         }
 
         Ok(())
+    }
+
+    /// Internal utility helper to check if an explicit expression is equivalent to an
+    /// implicit parameter (i.e., a missing update function).
+    fn check_redundant_expression(
+        var: VariableId,
+        expression: &FnUpdate,
+        bn: &BooleanNetwork,
+    ) -> bool {
+        if let FnUpdate::Param(id, args) = expression {
+            // The parameter is not redundant if it appears in more than one function:
+            for check_var in bn.variables() {
+                if check_var == var {
+                    continue;
+                }
+                if let Some(check_expression) = bn.get_update_function(check_var)
+                    && check_expression.contains_parameter(*id)
+                {
+                    return false; // This parameter appears in multiple expressions.
+                }
+            }
+
+            // The parameter is not redundant if its arguments are not variables:
+            let mut var_args = BTreeSet::new();
+            for arg in args {
+                if let Some(v) = arg.as_var() {
+                    var_args.insert(v);
+                } else {
+                    return false;
+                }
+            }
+
+            // The parameter is not redundant if it uses different regulators:
+            let declared = BTreeSet::from_iter(bn.as_graph().regulators(var));
+            if declared != var_args {
+                return false;
+            }
+
+            true
+        } else {
+            // This is not a parameter, meaning the expression is not redundant.
+            false
+        }
     }
 
     /// Read all constraints from an annotated `.aeon` file, **ignoring** any weights

@@ -48,6 +48,16 @@ pub fn check_variable_exists<S: 'static>(
         .ok_or_else(|| anyhow!("Variable `{:?}` not found.", variable))
 }
 
+pub fn check_variable_name_exists<'a, S: 'static>(
+    problem: &'a InferenceProblem<S>,
+    variable: &str,
+) -> Result<&'a VariableData, anyhow::Error> {
+    problem
+        .find_variable(variable)
+        .and_then(|var| problem.get_variable(var))
+        .ok_or_else(|| anyhow!("Variable `{variable}` not found."))
+}
+
 pub fn check_regulator_exists<S: 'static>(
     problem: &InferenceProblem<S>,
     target: VariableId,

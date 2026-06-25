@@ -6,7 +6,7 @@ use std::fs;
 const TOY_MODEL_4V_PATH: &str = "data/toy_models/4v-activ-fully-spec.aeon";
 const TOY_SPEC_4V_PATH: &str = "data/toy_models/4v-activ-specification.csv";
 
-const MYELOID_BN_PATH: &str = "data/myeloid/myeloid-fully-specified.aeon";
+const MYELOID_BN_PATH: &str = "data/myeloid/myeloid-fully-specified-adjusted-states.aeon";
 const MYELOID_DATA_SAT_PATH: &str = "data/myeloid/dataset-fps-adjusted-SAT.csv";
 const MYELOID_DATA_UNSAT_PATH: &str = "data/myeloid/dataset-fps-original-UNSAT.csv";
 

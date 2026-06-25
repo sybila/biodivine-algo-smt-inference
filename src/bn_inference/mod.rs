@@ -14,5 +14,8 @@ pub use update_function_definition::UpdateFunctionDefinition;
 
 pub mod constraints;
 
+mod inference_problem_iterator;
+pub use inference_problem_iterator::{BlockingAtom, InferenceProblemIterator};
+
 #[cfg(test)]
 mod integration_tests;

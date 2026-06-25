@@ -18,3 +18,7 @@ Various models and datasets for testing, benchmarking, and case studies.
     - Also, in this setting, we definitely do not expect all regulations to be essential (i.e. we do not have evidence that they play a role *in this particular biological process*, just that they are common across various cells).
     - This allows us to "scale" the inference problem: The smallest instance should cover the central SCC. Then we can gradually add other "input/output" variables as needed.
     - Some of the data was filtered using `preprocess_data.py`, but all outputs should be commited in the repository.
+
+ > For most models, the associated data is provided as `.csv` files, such that the final inference problem
+ > specification was then generated using `convert-data-to-annotations.py`, which converts the `.csv` table into
+ > the `.aeon` annotation format that can be used by the inference solver. 
