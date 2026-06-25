@@ -19,7 +19,7 @@ fn run_inference_enumerate_states() {
         .success()
         .stdout(contains("Solution #8").and(contains("Solution #9").not()));
 
-    // If we enumerate `s1` and `s2`, we should get 8*3=32 solutions.
+    // If we enumerate `s1` and `s2`, we should get 8*4=32 solutions.
     Command::cargo_bin("inference_problem_solver")
         .unwrap()
         .arg("data/example_simple/three-state-cycle.aeon")
