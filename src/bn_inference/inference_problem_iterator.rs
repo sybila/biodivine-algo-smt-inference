@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
 use std::sync::LazyLock;
 use z3::ast::Bool;
-use z3::{Model, SatResult};
+use z3::{FuncDecl, Model, SatResult};
 
 /// Matches `$name` to identify functions.
 static RE_DOLLAR_NAME: LazyLock<Regex> =
@@ -38,6 +38,9 @@ pub enum BlockingAtom {
 
     /// Block the valuation of a single variable in a given state (represented as `state/variable`).
     VariableInState(String, String),
+
+    /// Block all update functions using (represented as `$*`).
+    AllFunctions,
 
     /// Block the partial specification of an update function given by the points that
     /// appear in the inference constraints (represented as `$variable`).
@@ -67,7 +70,7 @@ impl BlockingAtom {
                 check_variable_name_exists(problem, var_name)?;
                 Ok(())
             }
-            BlockingAtom::AllStates => Ok(()),
+            BlockingAtom::AllStates | BlockingAtom::AllFunctions => Ok(()),
         }
     }
 }
@@ -76,7 +79,9 @@ impl FromStr for BlockingAtom {
     type Err = anyhow::Error;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        if let Some(caps) = RE_DOLLAR_NAME.captures(input) {
+        if input == "$*" {
+            Ok(BlockingAtom::AllFunctions)
+        } else if let Some(caps) = RE_DOLLAR_NAME.captures(input) {
             Ok(BlockingAtom::FunctionPoints(caps[1].to_string()))
         } else if let Some(caps) = RE_NAME_SLASH_NAME.captures(input) {
             let state_name = caps[1].to_string();
@@ -84,7 +89,7 @@ impl FromStr for BlockingAtom {
             match (state_name.as_str(), var_name.as_str()) {
                 ("*", "*") => Ok(BlockingAtom::AllStates),
                 ("*", _) => Ok(BlockingAtom::Variable(var_name)),
-                (_, "*") => Ok(BlockingAtom::State(var_name)),
+                (_, "*") => Ok(BlockingAtom::State(state_name)),
                 (_, _) => Ok(BlockingAtom::VariableInState(state_name, var_name)),
             }
         } else {
@@ -130,6 +135,24 @@ impl<'a, SOLVER: AbstractSolver + 'static> InferenceProblemIterator<'a, SOLVER> 
             atom.validate(&encoder.problem)?;
         }
 
+        fn collect_applications<SOLVER: AbstractSolver + 'static>(
+            solver: &SOLVER,
+            declaration: &FuncDecl,
+        ) -> LinkedHashSet<TypedAst> {
+            let mut applications = LinkedHashSet::new();
+            for assertion in solver.get_assertions() {
+                applications.extend(
+                    extract_specific_function_applications(&assertion, declaration)
+                        .into_iter()
+                        .map(|it| {
+                            TypedAst::try_from(it)
+                                .expect("Correctness violation: Function has invalid type.")
+                        }),
+                );
+            }
+            applications
+        }
+
         // Collect metadata for function applications.
         let mut fn_applications = BTreeMap::new();
         for atom in blocking_atoms {
@@ -143,20 +166,17 @@ impl<'a, SOLVER: AbstractSolver + 'static> InferenceProblemIterator<'a, SOLVER> 
                 {
                     // Only uninterpreted functions need to be processed this way. Fully specified
                     // functions do not need to be blocked.
+                    fn_applications.insert(var_id, collect_applications(&solver, declaration));
+                }
+            }
 
-                    let mut applications = LinkedHashSet::new();
-                    for assertion in solver.get_assertions() {
-                        applications.extend(
-                            extract_specific_function_applications(&assertion, declaration)
-                                .into_iter()
-                                .map(|it| {
-                                    TypedAst::try_from(it)
-                                        .expect("Correctness violation: Function has invalid type.")
-                                }),
-                        );
+            if *atom == BlockingAtom::AllFunctions {
+                for var_id in encoder.problem.variables() {
+                    if let UpdateFunctionDefinition::Uninterpreted(declaration) =
+                        encoder.update_function(var_id)
+                    {
+                        fn_applications.insert(var_id, collect_applications(&solver, declaration));
                     }
-
-                    fn_applications.insert(var_id, applications);
                 }
             }
         }
@@ -221,6 +241,18 @@ impl<'a, SOLVER: AbstractSolver + 'static> InferenceProblemIterator<'a, SOLVER> 
             .problem
             .states()
             .map(|state| self.block_state_atoms(model, &state))
+            .collect::<Vec<_>>();
+        Bool::and(&args)
+    }
+
+    /// Generate a [`Bool`] formula that is true in every model that shares the same
+    /// point-based partial specification of all update functions.
+    fn block_all_functions(&self, model: &Model) -> Bool {
+        let args = self
+            .encoder
+            .problem
+            .variables()
+            .map(|var| self.block_function_points(model, var))
             .collect::<Vec<_>>();
         Bool::and(&args)
     }
@@ -306,6 +338,7 @@ impl<'a, SOLVER: AbstractSolver + 'static> Iterator for InferenceProblemIterator
         for block in &self.blocking_atoms {
             let clause = match block {
                 BlockingAtom::AllStates => self.block_all_state_atoms(&model),
+                BlockingAtom::AllFunctions => self.block_all_functions(&model),
                 BlockingAtom::State(state_name) => self.block_state_atoms(&model, state_name),
                 BlockingAtom::Variable(var_name) => {
                     self.block_variable_atoms(&model, self.get_variable(var_name))
