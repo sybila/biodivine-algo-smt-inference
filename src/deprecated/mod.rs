@@ -256,8 +256,7 @@ impl InferenceProblem {
     ) {
         let name: String = name.into();
         assert!(self.state_declarations.contains_key(&name));
-        self.state_specification
-            .insert(name.clone(), observation.clone());
+        self.state_specification.insert(name, observation.clone());
     }
 
     /// Build a [`z3::Optimize`] solver instance that implements all prescribed constraints.
